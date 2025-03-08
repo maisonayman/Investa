@@ -1,13 +1,10 @@
 from django.shortcuts import render
-
-# Create your views here.
 import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from .utils import send_otp_email
+from .utils import send_otp_email, upload_profile_picture
 from django.core.cache import cache
 from firebase_admin import auth, db
-from .utils import upload_profile_picture
 from django.core.files.storage import default_storage
 
 
@@ -25,8 +22,13 @@ def request_otp(request):
             phone = data.get("phone")
             dob = data.get("date_of_birth")
 
-            if not email:
-                return JsonResponse({"error": "Email is required"}, status=400)
+            if not email or not national_id:
+                return JsonResponse({"error": "Email and National ID are required"}, status=400)
+
+            # Check if national ID already exists
+            existing_user = db.reference("users").child(national_id).get()
+            if existing_user:
+                return JsonResponse({"error": "National ID already exists"}, status=400)
 
             # Send OTP
             send_otp_email(email)
@@ -50,6 +52,7 @@ def request_otp(request):
 
     return JsonResponse({"error": "Invalid request"}, status=405)
 
+
 @csrf_exempt
 def verify_otp(request):
     """Verify OTP and create user after successful verification with profile picture."""
@@ -57,14 +60,12 @@ def verify_otp(request):
         return JsonResponse({"error": "Invalid request"}, status=405)
 
     try:
-        # Ensure request is multipart/form-data
         if not request.content_type.startswith("multipart/form-data"):
             return JsonResponse({"error": "Request content-type must be multipart/form-data"}, status=400)
 
         email = request.POST.get("email")
         otp_entered = request.POST.get("otp")
 
-        # Check stored OTP
         stored_otp = cache.get(email)
         if not stored_otp or stored_otp != otp_entered:
             return JsonResponse({"error": "Invalid or expired OTP"}, status=400)
@@ -89,7 +90,7 @@ def verify_otp(request):
             display_name=user_data["full_name"]
         )
 
-        # Save user details in Firebase Realtime Database
+        # Save user details in Firebase Realtime Database using national ID
         users_ref = db.reference("users")
         user_info = {
             "email": user_data["email"],
@@ -103,12 +104,92 @@ def verify_otp(request):
         if profile_picture_url:
             user_info["profile_picture"] = profile_picture_url
 
-        users_ref.child(user.uid).set(user_info)
+        users_ref.child(user_data["national_id"]).set(user_info)
 
         # Clear cache
         cache.delete(f"user_data_{email}")
 
-        return JsonResponse({"message": "Account created successfully", "uid": user.uid}, status=201)
+        return JsonResponse({"message": "Account created successfully", "national_id": user_data["national_id"]}, status=201)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def personal_data_list(request):
+    """Handle fetching and storing personal data in Firebase using national ID."""
+    ref = db.reference("personal_data")
+
+    if request.method == 'GET':
+        data = ref.get()
+        return JsonResponse(data if data else {}, status=200, safe=False)
+
+    elif request.method == 'POST':
+        try:
+            body = json.loads(request.body.decode('utf-8'))
+            national_id = body.get('national_id')
+
+            if not national_id:
+                return JsonResponse({'error': 'National ID is required'}, status=400)
+
+            # Check if national ID already exists
+            existing_data = ref.child(national_id).get()
+            if existing_data:
+                return JsonResponse({'error': 'National ID already exists'}, status=400)
+
+            ref.child(national_id).set({
+                'full_name': body.get('full_name', ''),
+                'national_id': national_id,
+                'phone_number': body.get('phone_number', ''),
+                'birthdate': body.get('birthdate', '2000-01-01'),
+                'governor': body.get('governor', ''),
+                'postal_code': body.get('postal_code', ''),
+                'address': body.get('address', ''),
+                'email': body.get('email', ''),
+            })
+
+            return JsonResponse({'message': 'Record created successfully', 'national_id': national_id}, status=201)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def personal_data_detail(request, national_id):
+    """Fetch, update, or delete personal data by national ID."""
+    ref = db.reference("personal_data").child(national_id)
+
+    if request.method == 'GET':
+        data = ref.get()
+        if not data:
+            return JsonResponse({'error': 'User not found'}, status=404)
+        return JsonResponse(data, status=200)
+
+    elif request.method == 'PUT':
+        try:
+            body = json.loads(request.body.decode('utf-8'))
+            old_data = ref.get()
+            if not old_data:
+                return JsonResponse({'error': 'User not found'}, status=404)
+
+            updated_data = {
+                'full_name': body.get('full_name') or old_data.get('full_name', ''),
+                'phone_number': body.get('phone_number') or old_data.get('phone_number', ''),
+                'birthdate': body.get('birthdate') or old_data.get('birthdate', '2000-01-01'),
+                'governor': body.get('governor') or old_data.get('governor', ''),
+                'postal_code': body.get('postal_code') or old_data.get('postal_code', ''),
+                'address': body.get('address') or  old_data.get('address', ''),
+            }
+
+            ref.update(updated_data)
+
+            return JsonResponse({'message': 'Record updated successfully'}, status=200)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    elif request.method == 'DELETE':
+        ref.delete()
+        return JsonResponse({'message': 'Record deleted successfully'}, status=200)
+
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
