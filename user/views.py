@@ -4,9 +4,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .utils import send_otp_email, upload_profile_picture
 from django.core.cache import cache
+import firebase_admin
 from firebase_admin import auth, db
 from django.core.files.storage import default_storage
-
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+import requests
+import uuid 
 
 @csrf_exempt
 def request_otp(request):
@@ -51,7 +55,6 @@ def request_otp(request):
             return JsonResponse({"error": str(e)}, status=400)
 
     return JsonResponse({"error": "Invalid request"}, status=405)
-
 
 @csrf_exempt
 def verify_otp(request):
@@ -114,7 +117,6 @@ def verify_otp(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-
 @csrf_exempt
 def personal_data_list(request):
     """Handle fetching and storing personal data in Firebase using national ID."""
@@ -154,7 +156,6 @@ def personal_data_list(request):
 
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-
 @csrf_exempt
 def personal_data_detail(request, national_id):
     """Fetch, update, or delete personal data by national ID."""
@@ -193,3 +194,100 @@ def personal_data_detail(request, national_id):
         return JsonResponse({'message': 'Record deleted successfully'}, status=200)
 
     return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+@csrf_exempt
+def sign_in(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            national_id = data.get("national_id")
+            password = data.get("password")
+
+            if not national_id or not password:
+                return JsonResponse({"message": "Missing national_id or password"}, status=400)
+
+            # 🔹 Step 1: Fetch user info from Firebase Realtime Database
+            users_ref = db.reference("users").get()
+
+            if not users_ref:
+                return JsonResponse({"message": "No users found"}, status=404)
+
+            user_email = None
+            for user_id, user_info in users_ref.items():
+                if user_info.get("national_id") == national_id:
+                    user_email = user_info.get("email")
+                    break
+
+            if not user_email:
+                return JsonResponse({"message": "User not found"}, status=404)
+
+            # 🔹 Step 2: Authenticate using Firebase Authentication
+            try:
+                user = auth.get_user_by_email(user_email)  # Check if user exists
+                custom_token = auth.create_custom_token(user.uid).decode("utf-8")  # Generate custom token
+
+                return JsonResponse({
+                    "message": "Sign-in successful",
+                    "email": user_info.get("email"),
+                    "user_id": user_id
+                })
+
+            except firebase_admin.auth.UserNotFoundError:
+                return JsonResponse({"message": "Invalid credentials"}, status=401)
+
+        except Exception as e:
+            return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
+
+    return JsonResponse({"message": "Invalid request method"}, status=400)
+
+
+
+
+PAYMENT_GATEWAY_URL = "https://accept.paymob.com/api/acceptance/payments/pay"
+
+
+@api_view(['POST'])
+def process_payment(request):
+    data = request.data
+    user_email = data.get("email")
+    amount = data.get("amount")
+    currency = "EGP"
+
+
+    if not user_email or not amount:
+        return Response({"error": "Email and amount are required"}, status=400)
+
+    # إنشاء ID فريد للدفع
+    payment_id = str(uuid.uuid4())
+
+    # حفظ بيانات الدفع في Firebase بحالة "pending"
+    payment_ref = db.reference(f'payments/{payment_id}')
+    payment_ref.set({
+        "user_email": user_email,
+        "amount": amount,
+        "currency": currency,
+        "status": "pending",
+        "transaction_id": None
+    })
+
+    # إرسال البيانات إلى بوابة الدفع
+    payload = {
+        "email": user_email,
+        "amount": float(amount),
+        "currency": currency
+    }
+    response = requests.post(PAYMENT_GATEWAY_URL, json=payload)
+
+    if response.status_code == 200:
+        transaction_id = response.json().get("transaction_id", "")
+
+        # تحديث حالة الدفع في Firebase إلى "completed"
+        payment_ref.update({
+            "status": "completed",
+            "transaction_id": transaction_id
+        })
+        return Response({"message": "Payment successful", "transaction_id": transaction_id})
+    else:
+        # تحديث حالة الدفع في Firebase إلى "failed"
+        payment_ref.update({"status": "failed"})
+        return Response({"error": "Payment failed"}, status=400)
