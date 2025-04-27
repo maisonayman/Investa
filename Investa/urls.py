@@ -17,6 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from user.views import request_otp,verify_otp,personal_data_detail,personal_data_list,sign_in,process_payment
 from django.urls import path
+from founder.views import create_project
+from investor.views import interests
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,6 +29,7 @@ urlpatterns = [
     path('personal_data_detail/<str:national_id>/', personal_data_detail, name='personal_data_detail'),
     path('sign_in/', sign_in, name='sign_in'),
     path('process_payment/', process_payment, name='process_payment'),
-    
+    path('create_project/', create_project, name='create_project'),
+    path('interests/', interests, name='interests'),
 
 ]

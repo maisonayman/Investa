@@ -1,4 +1,3 @@
-from django.shortcuts import render
 import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -6,11 +5,6 @@ from .utils import send_otp_email, upload_profile_picture
 from django.core.cache import cache
 import firebase_admin
 from firebase_admin import auth, db
-from django.core.files.storage import default_storage
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
-import requests
-import uuid 
 
 @csrf_exempt
 def request_otp(request):
@@ -241,53 +235,3 @@ def sign_in(request):
     return JsonResponse({"message": "Invalid request method"}, status=400)
 
 
-
-
-PAYMENT_GATEWAY_URL = "https://accept.paymob.com/api/acceptance/payments/pay"
-
-
-@api_view(['POST'])
-def process_payment(request):
-    data = request.data
-    user_email = data.get("email")
-    amount = data.get("amount")
-    currency = "EGP"
-
-
-    if not user_email or not amount:
-        return Response({"error": "Email and amount are required"}, status=400)
-
-    # إنشاء ID فريد للدفع
-    payment_id = str(uuid.uuid4())
-
-    # حفظ بيانات الدفع في Firebase بحالة "pending"
-    payment_ref = db.reference(f'payments/{payment_id}')
-    payment_ref.set({
-        "user_email": user_email,
-        "amount": amount,
-        "currency": currency,
-        "status": "pending",
-        "transaction_id": None
-    })
-
-    # إرسال البيانات إلى بوابة الدفع
-    payload = {
-        "email": user_email,
-        "amount": float(amount),
-        "currency": currency
-    }
-    response = requests.post(PAYMENT_GATEWAY_URL, json=payload)
-
-    if response.status_code == 200:
-        transaction_id = response.json().get("transaction_id", "")
-
-        # تحديث حالة الدفع في Firebase إلى "completed"
-        payment_ref.update({
-            "status": "completed",
-            "transaction_id": transaction_id
-        })
-        return Response({"message": "Payment successful", "transaction_id": transaction_id})
-    else:
-        # تحديث حالة الدفع في Firebase إلى "failed"
-        payment_ref.update({"status": "failed"})
-        return Response({"error": "Payment failed"}, status=400)
