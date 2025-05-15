@@ -1,11 +1,14 @@
 from django.http import JsonResponse
 from firebase_admin import db
 import json
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-import requests
-import uuid 
+from collections import Counter
+from django.conf import settings
+from datetime import datetime
+
+
+
 @api_view(['POST'])
 def interests(request):
     if request.method == 'POST':
@@ -32,51 +35,35 @@ def interests(request):
 PAYMENT_GATEWAY_URL = "https://accept.paymob.com/api/acceptance/payments/pay"
 
 
+
 @api_view(['POST'])
-def process_payment(request):
+def submit_payment(request):
     data = request.data
-    user_email = data.get("email")
-    amount = data.get("amount")
-    currency = "EGP"
 
+    project_id = data.get('project_id')
+    user_national_id = data.get('user_national_id')
+    amount = data.get('amount')
+    payment_method = data.get('payment_method')
+    transaction_id = data.get('transaction_id')  # optional
 
-    if not user_email or not amount:
-        return Response({"error": "Email and amount are required"}, status=400)
+    if not all([project_id, user_national_id, amount, payment_method]):
+        return Response({"error": "Missing required fields."}, status=400)
 
-    # إنشاء ID فريد للدفع
-    payment_id = str(uuid.uuid4())
-
-    # حفظ بيانات الدفع في Firebase بحالة "pending"
-    payment_ref = db.reference(f'payments/{payment_id}')
-    payment_ref.set({
-        "user_email": user_email,
+    payment_data = {
+        "project_id": project_id,
+        "user_national_id": user_national_id,
         "amount": amount,
-        "currency": currency,
-        "status": "pending",
-        "transaction_id": None
-    })
-
-    # إرسال البيانات إلى بوابة الدفع
-    payload = {
-        "email": user_email,
-        "amount": float(amount),
-        "currency": currency
+        "payment_method": payment_method,
+        "transaction_id": transaction_id or "",
+        "payment_date": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
-    response = requests.post(PAYMENT_GATEWAY_URL, json=payload)
 
-    if response.status_code == 200:
-        transaction_id = response.json().get("transaction_id", "")
+    try:
+        db.reference(f"payments").push(payment_data)
+        return Response({"message": "Payment recorded successfully."}, status=201)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
-        # تحديث حالة الدفع في Firebase إلى "completed"
-        payment_ref.update({
-            "status": "completed",
-            "transaction_id": transaction_id
-        })
-        return Response({"message": "Payment successful", "transaction_id": transaction_id})
-    else:
-        # تحديث حالة الدفع في Firebase إلى "failed"
-        payment_ref.update({"status": "failed"})
-        return Response({"error": "Payment failed"}, status=400)
 
 
 
@@ -118,3 +105,27 @@ def get_other_projects(request, user_id):
     ]
 
     return JsonResponse(other_projects, safe=False)
+
+
+@api_view(['GET'])
+def get_category_percentages(request):
+    # Get Firebase reference to the 'projects' table
+    projects_ref = settings.FIREBASE_REALTIME_DB.child('projects')
+    
+    # Fetch the projects data
+    projects_data = projects_ref.get()
+    
+    if not projects_data:
+        return JsonResponse({}, status=200)
+    
+    # Extract categories from the data
+    # Since the project doesn't have an 'id', we use the values of the project
+    categories = [project.get('category') for project in projects_data.values() if project.get('category')]
+    
+    # Calculate the percentage of each category
+    total_projects = len(categories)
+    category_counts = Counter(categories)
+    percentages = {cat: (count / total_projects) * 100 for cat, count in category_counts.items()}
+    
+    # Return the calculated percentages as JSON response
+    return JsonResponse(percentages)

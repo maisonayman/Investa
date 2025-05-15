@@ -39,9 +39,9 @@ from founder.views import create_project
 # Investor app views
 from investor.views import (
     interests,
-    #get_category_percentages,
+    get_category_percentages,
     #get_total_investments,
-    process_payment,
+    submit_payment,
     get_user_interest_projects,
     get_other_projects
 )
@@ -78,9 +78,9 @@ urlpatterns = [
     path('interests/', interests, name='interests'),
     path('get_other_projects/', get_other_projects, name='get_other_projects'),
     path('interest_projects/', get_user_interest_projects, name='get_user_interest_projects'),
-    #path('get_category_percentages/<str:national_id>/', get_category_percentages, name='get_category_percentages'),
+    path('get_category_percentages/<str:national_id>/', get_category_percentages, name='get_category_percentages'),
     #path('get_total_investments/<str:national_id>/', get_total_investments, name='get_total_investments'),
-    path('process_payment/', process_payment, name='process_payment'),
+    path('submit_payment/', submit_payment, name='submit_payment'),
 
     # Swagger documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
