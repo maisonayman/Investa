@@ -39,6 +39,7 @@ from founder.views import create_project
 # Investor app views
 from investor.views import (
     interests,
+    get_user_interest_projects,
     #get_category_percentages,
     #get_total_investments,
     #submit_payment
@@ -83,6 +84,7 @@ urlpatterns = [
 
     # Investor endpoints
     path('interests/', interests, name='interests'),
+    path('get_user_interest_projects/', get_user_interest_projects, name='get_user_interest_projects'),
     #path('get_category_percentages/<str:national_id>/', get_category_percentages, name='get_category_percentages'),
     #path('get_total_investments/<str:national_id>/', get_total_investments, name='get_total_investments'),
     #path('submit_payment/', submit_payment, name='submit_payment'),
