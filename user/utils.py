@@ -90,3 +90,22 @@ def upload_project_picture(file_obj, file_name):
     except Exception as e:
         raise Exception(f"Error uploading project picture: {e}")
 
+def upload_video_to_drive(file_path, file_name):
+    try:
+        service = build('drive', 'v3', credentials=settings.GDRIVE_CREDENTIALS)
+        
+        file_metadata = {'name': file_name}
+        media = MediaFileUpload(file_path, mimetype='video/mp4')
+
+        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+
+        # Make public
+        service.permissions().create(
+            fileId=file['id'],
+            body={'type': 'anyone', 'role': 'reader'}
+        ).execute()
+
+        return f"https://drive.google.com/uc?id={file['id']}"
+
+    except Exception as e:
+        raise Exception(f"Google Drive upload failed: {str(e)}") 
