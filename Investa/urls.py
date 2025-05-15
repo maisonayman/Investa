@@ -39,10 +39,11 @@ from founder.views import create_project
 # Investor app views
 from investor.views import (
     interests,
-    get_user_interest_projects,
     #get_category_percentages,
     #get_total_investments,
-    #submit_payment
+    process_payment,
+    get_user_interest_projects,
+    get_other_projects
 )
 
 # Swagger schema setup
@@ -55,15 +56,6 @@ schema_view = get_schema_view(
    public=True,
    permission_classes=(permissions.AllowAny,),
 )
-
-
-urlpatterns =[
-    
-    # Swagger documentation
-    path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
-    re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
-    path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
-]
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -84,9 +76,14 @@ urlpatterns = [
 
     # Investor endpoints
     path('interests/', interests, name='interests'),
-    path('get_user_interest_projects/', get_user_interest_projects, name='get_user_interest_projects'),
+    path('get_other_projects/', get_other_projects, name='get_other_projects'),
+    path('interest_projects/', get_user_interest_projects, name='get_user_interest_projects'),
     #path('get_category_percentages/<str:national_id>/', get_category_percentages, name='get_category_percentages'),
     #path('get_total_investments/<str:national_id>/', get_total_investments, name='get_total_investments'),
-    #path('submit_payment/', submit_payment, name='submit_payment'),
+    path('process_payment/', process_payment, name='process_payment'),
 
+    # Swagger documentation
+    path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+    path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 ]

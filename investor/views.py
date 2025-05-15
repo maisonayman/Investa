@@ -7,7 +7,6 @@ from rest_framework.decorators import api_view
 import requests
 import uuid 
 @api_view(['POST'])
-@csrf_exempt  
 def interests(request):
     if request.method == 'POST':
         try:
