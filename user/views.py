@@ -5,7 +5,10 @@ from .utils import send_otp_email, upload_profile_picture
 from django.core.cache import cache
 import firebase_admin
 from firebase_admin import auth, db
+from rest_framework.decorators import api_view
 
+
+@api_view(['POST'])
 @csrf_exempt
 def request_otp(request):
     """Send OTP and temporarily store user details."""
@@ -50,6 +53,8 @@ def request_otp(request):
 
     return JsonResponse({"error": "Invalid request"}, status=405)
 
+
+@api_view(['POST'])
 @csrf_exempt
 def verify_otp(request):
     """Verify OTP and create user after successful verification with profile picture."""
@@ -111,6 +116,7 @@ def verify_otp(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
+@api_view(['POST'])
 @csrf_exempt
 def personal_data_list(request):
     """Handle fetching and storing personal data in Firebase using national ID."""
@@ -150,6 +156,9 @@ def personal_data_list(request):
 
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+
+
+@api_view(['POST'])
 @csrf_exempt
 def personal_data_detail(request, national_id):
     """Fetch, update, or delete personal data by national ID."""
@@ -189,6 +198,9 @@ def personal_data_detail(request, national_id):
 
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+
+
+@api_view(['POST'])
 @csrf_exempt
 def sign_in(request):
     if request.method == "POST":

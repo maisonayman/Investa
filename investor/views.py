@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 import requests
 import uuid 
-
+@api_view(['POST'])
 @csrf_exempt  
 def interests(request):
     if request.method == 'POST':
@@ -78,3 +78,44 @@ def process_payment(request):
         # تحديث حالة الدفع في Firebase إلى "failed"
         payment_ref.update({"status": "failed"})
         return Response({"error": "Payment failed"}, status=400)
+
+
+
+@api_view(['GET'])
+def get_user_interest_projects(request, user_id):
+    # Get user's interests
+    user_ref = db.reference(f'users/{user_id}')
+    user_data = user_ref.get()
+    interests = user_data.get('interests', [])
+
+    # Get all projects
+    projects_ref = db.reference('projects')
+    all_projects = projects_ref.get()
+
+    # Filter matching projects
+    matching_projects = [
+        project for project in all_projects.values()
+        if project.get('category') in interests
+    ]
+
+    return JsonResponse(matching_projects, safe=False)
+
+
+@api_view(['GET'])
+def get_other_projects(request, user_id):
+    # Get user's interests
+    user_ref = db.reference(f'users/{user_id}')
+    user_data = user_ref.get()
+    interests = user_data.get('interests', [])
+
+    # Get all projects
+    projects_ref = db.reference('projects')
+    all_projects = projects_ref.get()
+
+    # Filter non-matching projects
+    other_projects = [
+        project for project in all_projects.values()
+        if project.get('category') not in interests
+    ]
+
+    return JsonResponse(other_projects, safe=False)
