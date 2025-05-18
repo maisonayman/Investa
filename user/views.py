@@ -258,7 +258,7 @@ def submit_review(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)'''
 
-
+'''
 @api_view(['POST'])
 def request_password_reset(request):
         try:
@@ -276,7 +276,7 @@ def request_password_reset(request):
                 return JsonResponse({'error': error or 'Unknown error.'}, status=500)
 
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+            return JsonResponse({'error': str(e)}, status=500)'''
 
 
 @api_view(['POST'])
