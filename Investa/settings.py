@@ -162,11 +162,19 @@ if not firebase_admin._apps:
         'databaseURL': 'https://investa812-default-rtdb.firebaseio.com/'  # Replace with your actual Realtime DB URL
     })
 
+FIREBASE_WEB_API_KEY = "AIzaSyCGC3qzQIuPnR4xTzh2vOqahVNTunQX3QM"
+
+
 # Get Firebase Realtime Database Reference
 FIREBASE_REALTIME_DB = db.reference()
 
+FOLDER_ID_FOR_REELS='1Datr67ecjoozkP5RcuP_NZHVGuhIgat5'
+FOLDER_ID_FOR_PROJECT_PIC='1wk6wL-KxNPJ9u2XF9NUDRb0pnJ07LE_g'
+FOLDER_ID_FOR_PROFILE_PIC='1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd'
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 # Path to your service account key file
 GOOGLE_DRIVE_KEY_FILE = os.path.join(BASE_DIR, "investakey.json")

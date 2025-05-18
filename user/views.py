@@ -1,68 +1,66 @@
 import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from .utils import send_otp_email, upload_profile_picture, upload_video_to_drive
+from .utils import send_otp_email, upload_video_to_drive
 from django.core.cache import cache
 import firebase_admin
 from firebase_admin import auth, db
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from firebase_admin import auth
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 import os
 import uuid
 from rest_framework import status
 from django.conf import settings
+import requests
 
 
 @api_view(['POST'])
 def request_otp(request):
-    """Send OTP and temporarily store user details."""
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            email = data.get("email")
-            password = data.get("password")
-            full_name = data.get("full_name")
-            gender = data.get("gender")
-            national_id = data.get("national_id")
-            phone = data.get("phone")
-            dob = data.get("date_of_birth")
+    """Send OTP and temporarily store user details using Firebase-generated ID."""
+    try:
+        data = json.loads(request.body)
+        email = data.get("email")
+        password = data.get("password")
+        username = data.get("username")
+        dob = data.get("date_of_birth")
 
-            if not email or not national_id:
-                return JsonResponse({"error": "Email and National ID are required"}, status=400)
+        if not email or not password:
+            return JsonResponse({"error": "Email and Password are required"}, status=400)
 
-            # Check if national ID already exists
-            existing_user = db.reference("users").child(national_id).get()
-            if existing_user:
-                return JsonResponse({"error": "National ID already exists"}, status=400)
+        # Check if email already exists
+        users_ref = db.reference("users")
+        existing_users = users_ref.order_by_child("email").equal_to(email).get()
+        if existing_users:
+            return JsonResponse({"error": "Email already exists"}, status=400)
 
-            # Send OTP
-            send_otp_email(email)
+        # Send OTP
+        send_otp_email(email)
 
-            # Store user details in cache for 10 minutes
-            user_data = {
-                "email": email,
-                "password": password,
-                "full_name": full_name,
-                "gender": gender,
-                "national_id": national_id,
-                "phone": phone,
-                "date_of_birth": dob
-            }
-            cache.set(f"user_data_{email}", user_data, timeout=600)
+        # Generate a new Firebase user ID for temporary storage
+        temp_user_ref = users_ref.push({})
+        temp_user_id = temp_user_ref.key
 
-            return JsonResponse({"message": "OTP sent to email"}, status=200)
+        # Cache user details for OTP verification
+        user_data = {
+            "firebase_user_id": temp_user_id,
+            "email": email,
+            "password": password,
+            "username": username,
+            "date_of_birth": dob
+        }
+        cache.set(f"user_data_{email}", user_data, timeout=600)
 
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=400)
+        return JsonResponse({"message": "OTP sent to email"}, status=200)
 
-    return JsonResponse({"error": "Invalid request"}, status=405)
-
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    
+    
 @api_view(['POST'])
 def verify_otp(request):
-    """Verify OTP and create user after successful verification with profile picture."""
+    """Verify OTP and create user after successful verification (no profile picture)."""
     if request.method != "POST":
         return JsonResponse({"error": "Invalid request"}, status=405)
 
@@ -84,43 +82,36 @@ def verify_otp(request):
         if not user_data:
             return JsonResponse({"error": "User data expired. Please sign up again."}, status=400)
 
-        # Handle profile picture upload
-        profile_picture_url = None
-        if "profile_picture" in request.FILES:
-            profile_picture = request.FILES["profile_picture"]
-            folder_id = settings.GDRIVE_PROFILE_PIC_FOLDER_ID
-            profile_picture_url = upload_profile_picture(profile_picture, profile_picture.name, folder_id)
-
         # Create user in Firebase Authentication
         user = auth.create_user(
             email=user_data["email"],
             password=user_data["password"],
-            display_name=user_data["full_name"]
+            display_name=user_data["username"]
         )
 
-        # Save user details in Firebase Realtime Database using national ID
+        # Use the UID generated by Firebase Auth
+        firebase_user_id = user.uid
+
+        # Save user details in Firebase Realtime Database
         users_ref = db.reference("users")
         user_info = {
             "email": user_data["email"],
-            "full_name": user_data["full_name"],
-            "gender": user_data["gender"],
-            "national_id": user_data["national_id"],
-            "phone": user_data["phone"],
+            "username": user_data["username"],
             "date_of_birth": user_data["date_of_birth"]
         }
-
-        if profile_picture_url:
-            user_info["profile_picture"] = profile_picture_url
-
-        users_ref.child(user_data["national_id"]).set(user_info)
+        users_ref.child(firebase_user_id).set(user_info)
 
         # Clear cache
         cache.delete(f"user_data_{email}")
 
-        return JsonResponse({"message": "Account created successfully", "national_id": user_data["national_id"]}, status=201)
+        return JsonResponse({
+            "message": "Account created successfully",
+            "user_id": firebase_user_id
+        }, status=201)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
 
 @csrf_exempt
 def personal_data_list(request):
@@ -200,50 +191,47 @@ def personal_data_detail(request, national_id):
 
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+
+
+
 @api_view(['POST'])
 def sign_in(request):
-        try:
-            data = json.loads(request.body)
-            national_id = data.get("national_id")
-            password = data.get("password")
+    try:
+        data = json.loads(request.body)
+        email = data.get("email")
+        password = data.get("password")
 
-            if not national_id or not password:
-                return JsonResponse({"message": "Missing national_id or password"}, status=400)
+        if not email or not password:
+            return JsonResponse({"message": "Missing email or password"}, status=400)
 
-            # 🔹 Step 1: Fetch user info from Firebase Realtime Database
-            users_ref = db.reference("users").get()
+        # Firebase REST API endpoint for sign in
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={settings.FIREBASE_WEB_API_KEY}"
 
-            if not users_ref:
-                return JsonResponse({"message": "No users found"}, status=404)
+        payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True
+        }
 
-            user_email = None
-            for user_id, user_info in users_ref.items():
-                if user_info.get("national_id") == national_id:
-                    user_email = user_info.get("email")
-                    break
+        response = requests.post(url, json=payload)
+        result = response.json()
 
-            if not user_email:
-                return JsonResponse({"message": "User not found"}, status=404)
+        if "error" in result:
+            return JsonResponse({"message": result["error"]["message"]}, status=401)
 
-            # 🔹 Step 2: Authenticate using Firebase Authentication
-            try:
-                user = auth.get_user_by_email(user_email)  # Check if user exists
-                custom_token = auth.create_custom_token(user.uid).decode("utf-8")  # Generate custom token
+        return JsonResponse({
+            "message": "Sign-in successful",
+            "idToken": result["idToken"],
+            "refreshToken": result["refreshToken"],
+            "user_id": result["localId"],
+            "email": result["email"]
+        })
 
-                return JsonResponse({
-                    "message": "Sign-in successful",
-                    "email": user_info.get("email"),
-                    "user_id": user_id
-                })
-
-            except firebase_admin.auth.UserNotFoundError:
-                return JsonResponse({"message": "Invalid credentials"}, status=401)
-
-        except Exception as e:
-            return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
+    except Exception as e:
+        return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
 
 
-@api_view(['POST'])
+'''@api_view(['POST'])
 def submit_review(request):
     data = request.data
 
@@ -268,11 +256,10 @@ def submit_review(request):
         db.reference(f"projects/{project_id}/reviews").push(review)
         return Response({"message": "Review submitted successfully."}, status=201)
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)'''
 
 
-
-'''@api_view(['POST'])
+@api_view(['POST'])
 def request_password_reset(request):
         try:
             data = json.loads(request.body)
@@ -290,7 +277,7 @@ def request_password_reset(request):
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-'''
+
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
@@ -308,8 +295,7 @@ def upload_video(request):
 
     try:
         drive_filename = f"{national_id}_reel.mp4"
-        folder_id = settings.FOLDER_ID
-        video_url = upload_video_to_drive(filename, drive_filename, folder_id)
+        video_url = upload_video_to_drive(filename, drive_filename)  # only 2 args now
 
         db.reference(f'reels/{national_id}').set({'video_url': video_url})
 

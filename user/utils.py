@@ -92,9 +92,12 @@ def upload_project_picture(file_obj, file_name):
 
 def upload_video_to_drive(file_path, file_name):
     try:
-        service = build('drive', 'v3', credentials=settings.GDRIVE_CREDENTIALS)
-        
-        file_metadata = {'name': file_name}
+        service = build('drive', 'v3', credentials=settings.GOOGLE_CREDENTIALS)
+
+        file_metadata = {
+            'name': file_name,
+            'parents': [settings.FOLDER_ID_FOR_REELS]  # Folder ID from settings
+        }
         media = MediaFileUpload(file_path, mimetype='video/mp4')
 
         file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
@@ -105,7 +108,7 @@ def upload_video_to_drive(file_path, file_name):
             body={'type': 'anyone', 'role': 'reader'}
         ).execute()
 
-        return f"https://drive.google.com/uc?id={file['id']}"
+        return f"https://drive.google.com/uc?id={file['id']}"  # OR use preview link if needed
 
     except Exception as e:
-        raise Exception(f"Google Drive upload failed: {str(e)}") 
+        raise Exception(f"Google Drive upload failed: {str(e)}")
