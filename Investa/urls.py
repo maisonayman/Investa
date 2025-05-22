@@ -27,7 +27,7 @@ from user.views import (
     personal_data_detail,
     personal_data_list,
     sign_in,
-    submit_review,
+    #submit_review,
     #request_password_reset,
     upload_video,
     get_reels
@@ -66,7 +66,7 @@ urlpatterns = [
     path('personal_data_list/', personal_data_list, name='personal_data_list'),
     path('personal_data_detail/<str:national_id>/', personal_data_detail, name='personal_data_detail'),
     path('sign_in/', sign_in, name='sign_in'),
-    path('submit_review/', submit_review, name='submit_review'),
+    #path('submit_review/', submit_review, name='submit_review'),
     #path('request_password_reset/', request_password_reset, name='request_password_reset'),
     path('upload_video/', upload_video, name='upload_video'),
     path('get_reels/', get_reels, name='get_reels'),
