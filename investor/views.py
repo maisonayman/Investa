@@ -6,6 +6,10 @@ from rest_framework.decorators import api_view
 from collections import Counter
 from django.conf import settings
 from datetime import datetime
+import requests
+import uuid 
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt
 
 
 
@@ -129,3 +133,147 @@ def get_category_percentages(request):
     
     # Return the calculated percentages as JSON response
     return JsonResponse(percentages)
+
+
+@csrf_exempt
+def save_project_api(request):
+    """
+    API لحفظ مشروع في المفضلة بناءً على الهوية الوطنية ومعرف المشروع
+    """
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body.decode('utf-8'))
+
+            national_id = body.get('national_id')
+            project_id = body.get('project_id')
+
+            if not (national_id and project_id):
+                return JsonResponse({'error': 'Missing fields'}, status=400)
+
+            # حفظ الربط في Firebase Realtime Database
+            ref = db.reference(f'saved_projects/{national_id}')
+            saved_data = {
+                'project_id': project_id,
+                'saved_at': datetime.now().isoformat()
+            }
+            new_ref = ref.push(saved_data)
+
+            return JsonResponse({'message': 'Project saved successfully', 'saved_id': new_ref.key}, status=201)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@csrf_exempt
+def get_saved_projects_api(request, national_id):
+    """
+    API لاسترجاع المشاريع المحفوظة بناءً على الهوية الوطنية
+    """
+    if request.method == 'GET':
+        try:
+            limit = int(request.GET.get('limit', 10))
+            offset = int(request.GET.get('offset', 0))
+
+            ref = db.reference(f'saved_projects/{national_id}')
+            projects = ref.get()
+
+            if projects:
+                project_list = []
+                for key, value in projects.items():
+                    value['id'] = key
+                    project_list.append(value)
+
+                project_list.sort(key=lambda x: x['saved_at'], reverse=True)
+                paginated = project_list[offset:offset+limit]
+
+                return JsonResponse(paginated, safe=False, status=200)
+            else:
+                return JsonResponse({'message': 'No saved projects found'}, status=404)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@csrf_exempt
+def delete_saved_project_api(request, national_id, saved_id):
+    """
+    API لحذف مشروع محفوظ بناءً على الهوية الوطنية ومعرف الحفظ
+    """
+    if request.method == 'DELETE':
+        try:
+            ref = db.reference(f'saved_projects/{national_id}/{saved_id}')
+            if ref.get():
+                ref.delete()
+                return JsonResponse({'message': 'Saved project deleted successfully'}, status=200)
+            else:
+                return JsonResponse({'error': 'Saved project not found'}, status=404)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@csrf_exempt
+def total_investment(request):
+    national_id = request.GET.get('national_id')
+    ref = db.reference('investments')
+    data = ref.get()
+
+    total = 0
+    if data:
+        for key, record in data.items():
+            if record.get('national_id') == national_id:
+                total += float(record.get('amount_invested', 0))
+
+    return JsonResponse({'total_investment': total})
+
+@csrf_exempt
+def total_current_net_profit(request):
+    national_id = request.GET.get('national_id')
+    ref = db.reference('investments')
+    data = ref.get()
+
+    total_profit = 0
+    if data:
+        for key, record in data.items():
+            if record.get('national_id') == national_id:
+                total_profit += float(record.get('current_profit', 0))
+
+    return JsonResponse({'total_current_net_profit': total_profit})
+
+@csrf_exempt
+def investment_types(request):
+    national_id = request.GET.get('national_id')
+    ref = db.reference('investments')
+    data = ref.get()
+
+    types = set()
+    if data:
+        for key, record in data.items():
+            if record.get('national_id') == national_id:
+                types.add(record.get('investment_type'))
+
+    return JsonResponse({'investment_types': list(types)})
+
+@csrf_exempt
+def businesses_invested_in(request):
+    national_id = request.GET.get('national_id')
+    ref = db.reference('investments')
+    data = ref.get()
+
+    businesses = []
+    if data:
+        for key, record in data.items():
+            if record.get('national_id') == national_id:
+                businesses.append({
+                    'name': record.get('business_name'),
+                    'amount': float(record.get('amount_invested', 0))
+                })
+
+    return JsonResponse({'businesses': businesses})
+

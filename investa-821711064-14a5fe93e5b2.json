@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "investa-821711064",
+  "private_key_id": "14a5fe93e5b23c742759789803f4f4ae84c7e6d9",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCdEoNz0M22xLMa\nsZComq04mTkCFwYTWS9bNyPKSjXZduun9ZCBszN++69vFGyhjZ+5hu1xM2+XXtty\nNVASzow+Z9uMJ7KBx8BdjcCoGVBFG7xPQq8EWrm/poHCePZR2kPfzSMpTC+D1w3b\niVcmS2MZW7uUd4y333oP9AvHrHcZK00PPF6Q1O/iFYDGrDoy1/Tk+wE3veycdlR8\neBIzbbw2i40yn2jk5NrggZemHYFsiO6YA6QFlaMr+AL4cZSm3x8+vFpCtVKC7lG2\nIMUaeXULCI39U3at0w7vjVBaNT+70EveM/Nr2rc1gp+jxexXlGvNHICCl6j/A6Mr\n+PdKWDERAgMBAAECggEAJIVXdyhHjIVzt3Mt1WYRfKVzsd60lO8ZqbXKZpCWsLeL\n14OrU9zczluq0MMI9w884iBTOQzil2mA0K9ArP7FcQUo8Q+R28ccHSSGdQ9dsJPg\nVvWESBjoM319kkAZ1bJQMcs6r7F9IsRv/mmSj97bbdv8Y2rglygo82ilDIo3Luyb\nCK16jLUcAQ7C7K98u2gRafHQ+PqQ8M6pZDell2MmHio/owhkey7jPPcL5mY/PM4P\nZXSZ5AEbYh2ahCrJ/kWyto7wQCk7NiJUt8jTXXgInG+Ev9Af+sQnZSdaDF8OG7T1\nQBvUWvr35ub1Rx2bCdgk3KDL8/UkEVut2UDnXceoOQKBgQDWsGqpsIKUK5DZWzC1\nF23u6J+TunlBWapqdXvsJlNbyZsZejqkI+i8m3qhRc9l6/32v05o+usQ4ZRLf6J4\nKnSDTGJ1Kj/gsWOXdHG+Kl/SdPTSGi/aLKc/dhbnlzvhRP5Ww4998SPxKULRwBLP\nGDoDt9IrR/k/rmjWL9cXdqxPOwKBgQC7S+TFVlTVLMcuxVKSMjca87wdGrFmjxv6\n6dYMmTQW0aqiVfpmAiVwfehWjJ8OcpOzaTj0Vi7MbpgOIXXMmbiUJaoeXYysQowO\nqIqnARyoZCUecqod0RqSIdIVgURj5QLLyp9G1CKuw9wknEAy7ckbfsz+j7WyJtgI\nnA6Cm75UIwKBgQCis5IyRY3AQwAEaaKRK09qBquhJmnsh8qp4Z1ny2fTIQfFGCfG\n61vfTCl0fVZ/VIjkbfk7gCWTZpGfYfw7+1jPhJz9VGaSn3ztdBcbWjvCYFaFv8jS\nHJMnehRDsQ51W3cxRAXEGXL2uiFkmp7mieK1nKLPoD0Z8NCMujbVFl/hrwKBgBze\nx/a7JfxuGI3XELFEWEYpR9fco3fBm3iDzuDGRMc3rmuzgRN0RT0fy058ApCBjM7c\n61COcExGx911vui40UDUxXJEzUhIQbqItEal3zr9pNMarapG7yeTWwTBlj8nr9Sl\n+QM789SokCh8hVDUYmmAlCyxDjrVzfsVww7S3vWtAoGAVRHuCZV5y9TXB27hTFqG\nfA2P/c/5Oas6RemUq8tgz2nAXEcaDceTX7oHj48LG1iOwTPmiSaFybAW6t8JcJf6\nE+3QnRcXvbQLuQQ0ENfABSDGnle9AwMXM00aE53uFEm80NVlFJmr+uu89QsyR/Qu\nzB63gBjPdu1Y/ccMh215muI=\n-----END PRIVATE KEY-----\n",
+  "client_email": "investa@investa-821711064.iam.gserviceaccount.com",
+  "client_id": "102826046460745770973",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/investa%40investa-821711064.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

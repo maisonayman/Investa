@@ -19,6 +19,9 @@ from django.urls import path, re_path
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from investor.views import save_project_api, get_saved_projects_api, delete_saved_project_api
+from investor import views 
+
 
 # User app views
 from user.views import (
@@ -86,4 +89,19 @@ urlpatterns = [
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+
+    # حفظ مشروع
+    path('api/save-project/', save_project_api, name='save_project'),
+
+    # استرجاع مشاريع محفوظة
+    path('api/get-saved-projects/<str:national_id>/', get_saved_projects_api, name='get_saved_projects'),
+
+    # حذف مشروع محفوظ
+    path('api/delete-saved-project/<str:national_id>/<str:saved_id>/', delete_saved_project_api, name='delete_saved_project'),
+    
+    path('api/total-investment/', views.total_investment),
+    path('api/net-profit/', views.total_current_net_profit),
+    path('api/investment-types/', views.investment_types),
+    path('api/businesses-invested/', views.businesses_invested_in),
+
 ]
