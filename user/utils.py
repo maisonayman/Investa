@@ -31,7 +31,7 @@ def send_otp_email(email):
     # Store OTP in cache for 5 minutes
     cache.set(email, otp, timeout=300)
 
-
+'''
 def upload_profile_picture(file_obj, file_name):
     """Upload a profile picture to Google Drive using service account authentication"""
     try:
@@ -60,7 +60,7 @@ def upload_profile_picture(file_obj, file_name):
 
     except Exception as e:
         raise Exception(f"Error uploading profile picture: {e}")
-
+'''
 
 
 def upload_project_picture(file_obj, file_name):
@@ -115,22 +115,20 @@ def upload_video_to_drive(file_path, file_name):
         raise Exception(f"Google Drive upload failed: {str(e)}")
 
 
-
-# تهيئة Firebase إذا لم تكن مهيئة
-if not firebase_admin._apps:
-    cred = credentials.Certificate(settings.FIREBASE_CRED_PATH)  # مسار ملف الشهادة
-    firebase_admin.initialize_app(cred, {
-        'databaseURL': settings.FIREBASE_DB_URL
-    })
-
-
-def upload_image_to_drive(file_obj, file_name):
+def upload_image_to_drive(file_obj, file_name, folder_id):
     """
-    Uploads an image to a specific Google Drive folder and returns its public link.
+    Uploads an image to Google Drive in the specified folder and returns a public link.
+    
+    Args:
+        file_obj: The uploaded image file (InMemoryUploadedFile).
+        file_name: Name to save the file as on Google Drive.
+        folder_id: ID of the Google Drive folder to upload the image to.
+
+    Returns:
+        str: Public URL to the uploaded image.
     """
     try:
         service = build("drive", "v3", credentials=settings.GOOGLE_CREDENTIALS)
-        folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"
 
         file_stream = io.BytesIO(file_obj.read())
         media = MediaIoBaseUpload(file_stream, mimetype="image/jpeg", resumable=True)
@@ -150,16 +148,3 @@ def upload_image_to_drive(file_obj, file_name):
 
     except Exception as e:
         raise Exception(f"Error uploading image to Google Drive: {e}")
-
-
-def save_image_url_to_firebase(image_url, path="images"):
-    """
-    Saves the image URL to Firebase Realtime Database under the given path.
-    """
-    try:
-        ref = db.reference(path)
-        new_entry = ref.push()
-        new_entry.set({"url": image_url})
-        return True
-    except Exception as e:
-        raise Exception(f"Error saving image URL to Firebase: {e}")

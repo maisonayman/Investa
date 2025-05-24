@@ -3,7 +3,6 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .utils import send_otp_email, upload_video_to_drive
 from django.core.cache import cache
-import firebase_admin
 from firebase_admin import auth, db
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -14,7 +13,7 @@ import uuid
 from rest_framework import status
 from django.conf import settings
 import requests
-from .utils import upload_image_to_drive, save_image_url_to_firebase
+from .utils import upload_image_to_drive
 
 @api_view(['POST'])
 def request_otp(request):
@@ -334,27 +333,23 @@ def get_reels(request):
         return Response({"error": str(e)}, status=500) 
     
 
-    
 @csrf_exempt
-def upload_and_save_image(request):
-    """
-    View to upload an image to Google Drive and save its link to Firebase.
-    """
+def upload_national_card(request):
     if request.method == 'POST':
         try:
             uploaded_file = request.FILES.get('image')
             if not uploaded_file:
-                return JsonResponse({'error': 'No image file provided.'}, status=400)
+                return JsonResponse({'error': 'No image provided.'}, status=400)
 
             file_name = uploaded_file.name
+            folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"  # مجلد البطاقات القومية
 
-            # Upload to Google Drive
-            drive_url = upload_image_to_drive(uploaded_file, file_name)
+            image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
 
-            # Save to Firebase
-            save_image_url_to_firebase(drive_url)
+            ref = db.reference("national_cards")
+            ref.push().set({"url": image_url})
 
-            return JsonResponse({'message': 'Image uploaded and saved successfully.', 'url': drive_url})
+            return JsonResponse({'message': 'National card uploaded.', 'url': image_url})
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
