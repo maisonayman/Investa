@@ -1,10 +1,9 @@
 import json
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
-from .utils import send_otp_email, upload_video_to_drive
+from .utils import send_otp_email, upload_video_to_drive, send_password_reset_email_custom
 from django.core.cache import cache
 from firebase_admin import auth, db
-from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -191,8 +190,6 @@ def personal_data_detail(request, national_id):
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 
-
-
 @api_view(['POST'])
 def sign_in(request):
     try:
@@ -257,26 +254,33 @@ def submit_review(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)'''
 
-'''
+
 @api_view(['POST'])
-def request_password_reset(request):
-        try:
-            data = json.loads(request.body)
-            email = data.get('email')
+def send_reset_link(request):
+    email = request.data.get('email')
+    if not email:
+        return Response({"error": "Email is required"}, status=400)
 
-            if not email:
-                return JsonResponse({'error': 'Email is required.'}, status=400)
+    try:
+        send_password_reset_email_custom(email)
+        return Response({"message": "Reset link sent successfully"})
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
-            success, error = send_password_reset_email(email)
 
-            if success:
-                return JsonResponse({'message': 'If the email exists, a reset link has been sent.'}, status=200)
-            else:
-                return JsonResponse({'error': error or 'Unknown error.'}, status=500)
+@api_view(['GET'])
+def reset_password_with_code(request):
+    oob_code = request.data.get('oob_code')
+    new_password = request.data.get('new_password')
 
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)'''
+    if not oob_code or not new_password:
+        return Response({"error": "Missing oob_code or password"}, status=400)
 
+    try:
+        auth.confirm_password_reset(oob_code, new_password)
+        return Response({"message": "Password has been reset successfully"})
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])

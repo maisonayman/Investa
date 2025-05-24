@@ -33,10 +33,13 @@ from user.views import (
     upload_video,
     get_reels,
     upload_national_card,
+    send_reset_link,
+    reset_password_with_code
+
 )
 
 # Founder app views
-from founder.views import create_project
+#from founder.views import create_project
 
 # Investor app views
 from investor.views import (
@@ -48,7 +51,11 @@ from investor.views import (
     get_other_projects,
     save_project_api,
     get_saved_projects_api,
-    delete_saved_project_api
+    delete_saved_project_api,
+    total_investment,
+    total_current_net_profit,
+    investment_types,
+    businesses_invested_in,
 )
 
 # Swagger schema setup
@@ -75,9 +82,12 @@ urlpatterns = [
     #path('request_password_reset/', request_password_reset, name='request_password_reset'),
     path('upload_video/', upload_video, name='upload_video'),
     path('get_reels/', get_reels, name='get_reels'),
+    path('send-reset-link/', send_reset_link, name='send_reset_link'),
+    path('reset-password/', reset_password_with_code, name='reset-password'),
+
 
     # Founder endpoints
-    path('create_project/', create_project, name='create_project'),
+    #path('create_project/', create_project, name='create_project'),
 
     # Investor endpoints
     path('interests/', interests, name='interests'),
@@ -101,10 +111,10 @@ urlpatterns = [
     # حذف مشروع محفوظ
     path('api/delete-saved-project/<str:national_id>/<str:saved_id>/', delete_saved_project_api, name='delete_saved_project'),
     
-    path('api/total-investment/', views.total_investment),
-    path('api/net-profit/', views.total_current_net_profit),
-    path('api/investment-types/', views.investment_types),
-    path('api/businesses-invested/', views.businesses_invested_in),
+    path('api/total-investment/', total_investment , name='total_investment'),
+    path('api/net-profit/', total_current_net_profit, name='total_current_net_profit'),
+    path('api/investment-types/',investment_types, name='investment_types'),
+    path('api/businesses-invested/',businesses_invested_in , name='businesses_invested_in' ),
     path('upload-image/', upload_national_card, name='upload_image'),  # مسار رفع الصور
 
 

@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .utils import upload_project_picture
 from firebase_admin import db
-
+"""
 @csrf_exempt
 def create_project(request):
     if request.method == 'POST':
@@ -17,8 +17,21 @@ def create_project(request):
             # 2. Parse other project data
             project_data = request.POST
             project_info = {
-                "project_name": project_data.get("project_name"),
-                "description": project_data.get("description"),
+                "first_name": project_data.get("first_name"),
+                "last_name": project_data.get("last_name"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
+                "category": project_data.get("category"),
                 "category": project_data.get("category"),
 
             }
@@ -37,3 +50,4 @@ def create_project(request):
 
     return JsonResponse({"status": "fail", "message": "Only POST allowed"}, status=405)
 
+"""
