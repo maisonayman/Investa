@@ -49,9 +49,9 @@ from investor.views import (
     submit_payment,
     get_user_interest_projects,
     get_other_projects,
-    save_project_api,
-    get_saved_projects_api,
-    delete_saved_project_api,
+    save_project,
+    get_saved_projects,
+    delete_saved_project,
     total_investment,
     total_current_net_profit,
     investment_types,
@@ -103,19 +103,19 @@ urlpatterns = [
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 
     # حفظ مشروع
-    path('api/save-project/', save_project_api, name='save_project'),
+    path('api/save-project/', save_project, name='save_project'),
 
     # استرجاع مشاريع محفوظة
-    path('api/get-saved-projects/<str:national_id>/', get_saved_projects_api, name='get_saved_projects'),
+    path('api/get-saved-projects/<str:national_id>/', get_saved_projects, name='get_saved_projects'),
 
     # حذف مشروع محفوظ
-    path('api/delete-saved-project/<str:national_id>/<str:saved_id>/', delete_saved_project_api, name='delete_saved_project'),
+    path('api/delete-saved-project/<str:national_id>/<str:saved_id>/', delete_saved_project, name='delete_saved_project'),
     
     path('api/total-investment/', total_investment , name='total_investment'),
     path('api/net-profit/', total_current_net_profit, name='total_current_net_profit'),
     path('api/investment-types/',investment_types, name='investment_types'),
     path('api/businesses-invested/',businesses_invested_in , name='businesses_invested_in' ),
-    path('upload-image/', upload_national_card, name='upload_image'),  # مسار رفع الصور
+    path('upload-national-card/', upload_national_card, name='upload-national-card'),  # مسار رفع الصور
 
 
 ]

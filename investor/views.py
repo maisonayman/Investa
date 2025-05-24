@@ -136,10 +136,7 @@ def get_category_percentages(request):
 
 
 @csrf_exempt
-def save_project_api(request):
-    """
-    API لحفظ مشروع في المفضلة بناءً على الهوية الوطنية ومعرف المشروع
-    """
+def save_project(request):
     if request.method == 'POST':
         try:
             body = json.loads(request.body.decode('utf-8'))
@@ -167,10 +164,8 @@ def save_project_api(request):
 
 
 @csrf_exempt
-def get_saved_projects_api(request, national_id):
-    """
-    API لاسترجاع المشاريع المحفوظة بناءً على الهوية الوطنية
-    """
+def get_saved_projects(request, national_id):
+    
     if request.method == 'GET':
         try:
             limit = int(request.GET.get('limit', 10))
@@ -199,10 +194,8 @@ def get_saved_projects_api(request, national_id):
 
 
 @csrf_exempt
-def delete_saved_project_api(request, national_id, saved_id):
-    """
-    API لحذف مشروع محفوظ بناءً على الهوية الوطنية ومعرف الحفظ
-    """
+def delete_saved_project(request, national_id, saved_id):
+   
     if request.method == 'DELETE':
         try:
             ref = db.reference(f'saved_projects/{national_id}/{saved_id}')

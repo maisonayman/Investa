@@ -31,65 +31,6 @@ def send_otp_email(email):
     # Store OTP in cache for 5 minutes
     cache.set(email, otp, timeout=300)
 
-'''
-def upload_profile_picture(file_obj, file_name):
-    """Upload a profile picture to Google Drive using service account authentication"""
-    try:
-        service = build("drive", "v3", credentials=settings.GOOGLE_CREDENTIALS)
-        folder_id = "1seaYwKWBfPXVJugLYuTbio0BklwhT6U7"  # Replace with your actual Google Drive folder ID
-
-        # Convert file to bytes
-        file_stream = io.BytesIO(file_obj.read())  # Read file from memory
-        media = MediaIoBaseUpload(file_stream, mimetype="image/jpeg", resumable=True)
-
-        # File metadata
-        file_metadata = {
-            "name": file_name,
-            "parents": [folder_id]
-        }
-
-        # Upload file
-        uploaded_file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields="id"
-        ).execute()
-
-        # Return the direct viewable link
-        return f"https://drive.google.com/uc?id={uploaded_file['id']}"
-
-    except Exception as e:
-        raise Exception(f"Error uploading profile picture: {e}")
-'''
-
-def upload_project_picture(file_obj, file_name):
-    try:
-        service = build("drive", "v3", credentials=settings.GOOGLE_CREDENTIALS)
-        folder_id = "1seaYwKWBfPXVJugLYuTbio0BklwhT6U7"  # Replace with your actual Google Drive folder ID
-
-        # Convert file to bytes
-        file_stream = io.BytesIO(file_obj.read())  # Read file from memory
-        media = MediaIoBaseUpload(file_stream, mimetype="image/jpeg", resumable=True)
-
-        # File metadata
-        file_metadata = {
-            "name": file_name,
-            "parents": [folder_id]
-        }
-
-        # Upload file
-        uploaded_file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields="id"
-        ).execute()
-
-        # Return the direct viewable link
-        return f"https://drive.google.com/uc?id={uploaded_file['id']}"
-
-    except Exception as e:
-        raise Exception(f"Error uploading project picture: {e}")
-
 
 def upload_video_to_drive(file_path, file_name):
     try:
