@@ -14,7 +14,7 @@ import uuid
 from rest_framework import status
 from django.conf import settings
 import requests
-
+from .utils import upload_image_to_drive, save_image_url_to_firebase
 
 @api_view(['POST'])
 def request_otp(request):
@@ -332,3 +332,31 @@ def get_reels(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500) 
+    
+
+    
+@csrf_exempt
+def upload_and_save_image(request):
+    """
+    View to upload an image to Google Drive and save its link to Firebase.
+    """
+    if request.method == 'POST':
+        try:
+            uploaded_file = request.FILES.get('image')
+            if not uploaded_file:
+                return JsonResponse({'error': 'No image file provided.'}, status=400)
+
+            file_name = uploaded_file.name
+
+            # Upload to Google Drive
+            drive_url = upload_image_to_drive(uploaded_file, file_name)
+
+            # Save to Firebase
+            save_image_url_to_firebase(drive_url)
+
+            return JsonResponse({'message': 'Image uploaded and saved successfully.', 'url': drive_url})
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method.'}, status=405)

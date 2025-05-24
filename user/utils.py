@@ -6,7 +6,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import io
 from googleapiclient.http import MediaIoBaseUpload
-
+import firebase_admin
+from firebase_admin import credentials, db
 
 
 # Temporary OTP storage (use a database in production)
@@ -112,3 +113,53 @@ def upload_video_to_drive(file_path, file_name):
 
     except Exception as e:
         raise Exception(f"Google Drive upload failed: {str(e)}")
+
+
+
+# تهيئة Firebase إذا لم تكن مهيئة
+if not firebase_admin._apps:
+    cred = credentials.Certificate(settings.FIREBASE_CRED_PATH)  # مسار ملف الشهادة
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': settings.FIREBASE_DB_URL
+    })
+
+
+def upload_image_to_drive(file_obj, file_name):
+    """
+    Uploads an image to a specific Google Drive folder and returns its public link.
+    """
+    try:
+        service = build("drive", "v3", credentials=settings.GOOGLE_CREDENTIALS)
+        folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"
+
+        file_stream = io.BytesIO(file_obj.read())
+        media = MediaIoBaseUpload(file_stream, mimetype="image/jpeg", resumable=True)
+
+        file_metadata = {
+            "name": file_name,
+            "parents": [folder_id]
+        }
+
+        uploaded_file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id"
+        ).execute()
+
+        return f"https://drive.google.com/uc?id={uploaded_file['id']}"
+
+    except Exception as e:
+        raise Exception(f"Error uploading image to Google Drive: {e}")
+
+
+def save_image_url_to_firebase(image_url, path="images"):
+    """
+    Saves the image URL to Firebase Realtime Database under the given path.
+    """
+    try:
+        ref = db.reference(path)
+        new_entry = ref.push()
+        new_entry.set({"url": image_url})
+        return True
+    except Exception as e:
+        raise Exception(f"Error saving image URL to Firebase: {e}")

@@ -21,7 +21,7 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from investor.views import save_project_api, get_saved_projects_api, delete_saved_project_api
 from investor import views 
-
+from user.views import upload_and_save_image  # استيراد الفيو من تطبيق user
 
 # User app views
 from user.views import (
@@ -103,5 +103,7 @@ urlpatterns = [
     path('api/net-profit/', views.total_current_net_profit),
     path('api/investment-types/', views.investment_types),
     path('api/businesses-invested/', views.businesses_invested_in),
+    path('upload-image/', upload_and_save_image, name='upload_image'),  # مسار رفع الصور
+
 
 ]
