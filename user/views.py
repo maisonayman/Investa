@@ -1,7 +1,7 @@
 import json
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
-from .utils import send_otp_email, upload_video_to_drive, send_password_reset_email_custom
+from Investa.utils import send_otp_email, upload_video_to_drive, send_password_reset_email_custom, upload_image_to_drive
 from django.core.cache import cache
 from firebase_admin import auth, db
 from rest_framework.response import Response
@@ -12,7 +12,7 @@ import uuid
 from rest_framework import status
 from django.conf import settings
 import requests
-from .utils import upload_image_to_drive
+
 
 @api_view(['POST'])
 def request_otp(request):

@@ -39,7 +39,10 @@ from user.views import (
 )
 
 # Founder app views
-#from founder.views import create_project
+from founder.views import (
+    insert_project,
+    insert_business_details
+    )
 
 # Investor app views
 from investor.views import (
@@ -87,7 +90,9 @@ urlpatterns = [
 
 
     # Founder endpoints
-    #path('create_project/', create_project, name='create_project'),
+    path('insert-project/', insert_project, name='insert_project'),
+    path('insert_business_details/', insert_business_details, name='insert_business_details'),
+
 
     # Investor endpoints
     path('interests/', interests, name='interests'),
@@ -102,13 +107,8 @@ urlpatterns = [
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 
-    # حفظ مشروع
     path('api/save-project/', save_project, name='save_project'),
-
-    # استرجاع مشاريع محفوظة
     path('api/get-saved-projects/<str:national_id>/', get_saved_projects, name='get_saved_projects'),
-
-    # حذف مشروع محفوظ
     path('api/delete-saved-project/<str:national_id>/<str:saved_id>/', delete_saved_project, name='delete_saved_project'),
     
     path('api/total-investment/', total_investment , name='total_investment'),

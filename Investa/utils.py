@@ -31,30 +31,27 @@ def send_otp_email(email):
     # Store OTP in cache for 5 minutes
     cache.set(email, otp, timeout=300)
 
-
-def upload_video_to_drive(file_path, file_name):
+def upload_video_to_drive(file_path, file_name, folder_id):
     try:
         service = build('drive', 'v3', credentials=settings.GOOGLE_CREDENTIALS)
 
         file_metadata = {
             'name': file_name,
-            'parents': [settings.FOLDER_ID_FOR_REELS]  # Folder ID from settings
+            'parents': [folder_id]  # Now dynamic
         }
         media = MediaFileUpload(file_path, mimetype='video/mp4')
 
         file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 
-        # Make public
         service.permissions().create(
             fileId=file['id'],
             body={'type': 'anyone', 'role': 'reader'}
         ).execute()
 
-        return f"https://drive.google.com/uc?id={file['id']}"  # OR use preview link if needed
+        return f"https://drive.google.com/uc?id={file['id']}"
 
     except Exception as e:
         raise Exception(f"Google Drive upload failed: {str(e)}")
-
 
 
 def upload_image_to_drive(file_obj, file_name, folder_id):
@@ -90,6 +87,43 @@ def upload_image_to_drive(file_obj, file_name, folder_id):
 
     except Exception as e:
         raise Exception(f"Error uploading image to Google Drive: {e}")
+
+
+# تحميل credentials من settings
+drive_service = build(
+    'drive', 'v3', credentials=settings.GOOGLE_CREDENTIALS
+)
+
+def upload_file_to_drive(file_path, file_name):
+    """
+    Uploads a general file (PDF, DOCX, etc.) to Google Drive
+    and returns the public URL.
+    """
+    try:
+        file_metadata = {
+            "name": file_name,
+            "parents": [settings.FOLDER_ID_FOR_FILES]  # فولدر الملفات مش الفيديوهات
+        }
+
+        media = MediaFileUpload(file_path, resumable=True)
+        uploaded_file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id"
+        ).execute()
+
+        file_id = uploaded_file.get("id")
+
+        drive_service.permissions().create(
+            fileId=file_id,
+            body={"role": "reader", "type": "anyone"},
+        ).execute()
+
+        return f"https://drive.google.com/uc?id={file_id}"
+
+    except Exception as e:
+        print(f"Error uploading file: {e}")
+        return ""
 
 
 def send_password_reset_email_custom(email):
