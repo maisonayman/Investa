@@ -64,21 +64,21 @@ def verify_otp(request):
 
     try:
         if not request.content_type.startswith("multipart/form-data"):
-            return JsonResponse({"error": "Request content-type must be multipart/form-data"}, status=400)
+            return JsonResponse({"error": "Request content-type must be multipart/form-data"}, status=402)
 
         email = request.POST.get("email")
         otp_entered = request.POST.get("otp")
 
         stored_otp = cache.get(email)
         if not stored_otp or stored_otp != otp_entered:
-            return JsonResponse({"error": "Invalid or expired OTP"}, status=400)
+            return JsonResponse({"error": "Invalid or expired OTP"}, status=403)
 
         cache.delete(email)  # OTP is used, delete it
 
         # Retrieve stored user data
         user_data = cache.get(f"user_data_{email}")
         if not user_data:
-            return JsonResponse({"error": "User data expired. Please sign up again."}, status=400)
+            return JsonResponse({"error": "User data expired. Please sign up again."}, status=404)
 
         # Create user in Firebase Authentication
         user = auth.create_user(
@@ -215,12 +215,31 @@ def sign_in(request):
         if "error" in result:
             return JsonResponse({"message": result["error"]["message"]}, status=401)
 
+        user_id = result["localId"]
+        id_token = result["idToken"]
+
+        # Get user data from Realtime Database
+        db_url = f"{settings.FIREBASE_DB_URL}/users/{user_id}.json?auth={id_token}"
+        user_response = requests.get(db_url)
+        user_data = user_response.json()
+
+        if user_data is None:
+            return JsonResponse({
+                "message": "Sign-in successful, but user details not found in database.",
+                "idToken": id_token,
+                "refreshToken": result["refreshToken"],
+                "user_id": user_id,
+                "email": result["email"]
+            })
+
         return JsonResponse({
             "message": "Sign-in successful",
-            "idToken": result["idToken"],
+            "idToken": id_token,
             "refreshToken": result["refreshToken"],
-            "user_id": result["localId"],
-            "email": result["email"]
+            "user_id": user_id,
+            "email": result["email"],
+            "date_of_birth": user_data.get("date_of_birth"),
+            "username": user_data.get("username")
         })
 
     except Exception as e:

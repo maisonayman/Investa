@@ -32,6 +32,7 @@ ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     'rest_framework',
+    'corsheaders',
     'drf_yasg',
     'user',
     'founder',
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -160,6 +162,7 @@ if not firebase_admin._apps:
 
 FIREBASE_WEB_API_KEY = "AIzaSyCGC3qzQIuPnR4xTzh2vOqahVNTunQX3QM"
 
+FIREBASE_DB_URL ="https://investa812-default-rtdb.firebaseio.com/"
 
 # Get Firebase Realtime Database Reference
 FIREBASE_REALTIME_DB = db.reference()
@@ -181,3 +184,5 @@ GOOGLE_CREDENTIALS = service_account.Credentials.from_service_account_file(
     GOOGLE_DRIVE_KEY_FILE,
     scopes=["https://www.googleapis.com/auth/drive"]
 )  
+
+CORS_ALLOW_ALL_ORIGINS = True
