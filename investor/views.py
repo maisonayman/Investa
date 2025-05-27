@@ -69,8 +69,6 @@ def submit_payment(request):
         return Response({"error": str(e)}, status=500)
 
 
-
-
 @api_view(['GET'])
 def get_user_interest_projects(request, user_id):
     # Get user's interests
@@ -135,20 +133,20 @@ def get_category_percentages(request):
     return JsonResponse(percentages)
 
 
-@csrf_exempt
+@api_view(['POST'])
 def save_project(request):
     if request.method == 'POST':
         try:
             body = json.loads(request.body.decode('utf-8'))
 
-            national_id = body.get('national_id')
+            user_id = body.get('user_id')
             project_id = body.get('project_id')
 
-            if not (national_id and project_id):
+            if not (user_id and project_id):
                 return JsonResponse({'error': 'Missing fields'}, status=400)
 
             # حفظ الربط في Firebase Realtime Database
-            ref = db.reference(f'saved_projects/{national_id}')
+            ref = db.reference(f'saved_projects/{user_id}')
             saved_data = {
                 'project_id': project_id,
                 'saved_at': datetime.now().isoformat()

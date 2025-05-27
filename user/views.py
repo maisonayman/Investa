@@ -110,10 +110,9 @@ def verify_otp(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-
-@csrf_exempt
+@api_view(['POST'])
 def personal_data_list(request):
-    """Handle fetching and storing personal data in Firebase using national ID."""
+    """Store personal data under user_id (from Firebase) instead of national_id."""
     ref = db.reference("personal_data")
 
     if request.method == 'GET':
@@ -123,28 +122,29 @@ def personal_data_list(request):
     elif request.method == 'POST':
         try:
             body = json.loads(request.body.decode('utf-8'))
-            national_id = body.get('national_id')
+            user_id = body.get('user_id')  # user_id from Firebase Auth
 
-            if not national_id:
-                return JsonResponse({'error': 'National ID is required'}, status=400)
+            if not user_id:
+                return JsonResponse({'error': 'User ID is required'}, status=400)
 
-            # Check if national ID already exists
-            existing_data = ref.child(national_id).get()
+            # Check if user already has data
+            existing_data = ref.child(user_id).get()
             if existing_data:
-                return JsonResponse({'error': 'National ID already exists'}, status=400)
+                return JsonResponse({'error': 'Personal data already exists for this user'}, status=400)
 
-            ref.child(national_id).set({
-                'full_name': body.get('full_name', ''),
-                'national_id': national_id,
-                'phone_number': body.get('phone_number', ''),
-                'birthdate': body.get('birthdate', '2000-01-01'),
-                'governor': body.get('governor', ''),
-                'postal_code': body.get('postal_code', ''),
-                'address': body.get('address', ''),
-                'email': body.get('email', ''),
+            # Save the data
+            ref.child(user_id).set({
+                'full_name': body.get('full_name', '').strip(),
+                'national_id': body.get('national_number', '').strip(),
+                'phone_number': body.get('phone_number', '').strip(),
+                'birthdate': body.get('birthdate', '2000-01-01').strip(),
+                'country': body.get('country', '').strip(),
+                'postal_code': body.get('postal_code', '').strip(),
+                'address': body.get('address_1', '').strip(),
+                'address': body.get('address_2', '').strip()
             })
 
-            return JsonResponse({'message': 'Record created successfully', 'national_id': national_id}, status=201)
+            return JsonResponse({'message': 'Personal data saved successfully'}, status=201)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 

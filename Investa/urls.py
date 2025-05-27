@@ -61,6 +61,8 @@ from investor.views import (
     businesses_invested_in,
 )
 
+from web.views import monthly_finance_firebase_view, add_monthly_finance
+
 # Swagger schema setup
 schema_view = get_schema_view(
    openapi.Info(
@@ -101,6 +103,10 @@ urlpatterns = [
     path('get_category_percentages/<str:national_id>/', get_category_percentages, name='get_category_percentages'),
     #path('get_total_investments/<str:national_id>/', get_total_investments, name='get_total_investments'),
     path('submit_payment/', submit_payment, name='submit_payment'),
+
+    # Web endpoints
+    path('monthly-finance/', monthly_finance_firebase_view, name='monthly-finance'),
+    path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
 
     # Swagger documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
