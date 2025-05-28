@@ -145,3 +145,31 @@ def send_password_reset_email_custom(email):
 
     except Exception as e:
         raise Exception(f"Error sending password reset email: {e}")
+
+
+def get_or_create_drive_folder(folder_name, parent_folder_id):
+    """
+    Check if folder with folder_name exists inside parent_folder_id.
+    If yes, return its folder_id.
+    If no, create it and return new folder_id.
+    """
+
+    # Assuming you have Google Drive API client already setup as 'drive_service'
+    query = f"mimeType='application/vnd.google-apps.folder' and trashed=false and name='{folder_name}' and '{parent_folder_id}' in parents"
+    results = drive_service.files().list(q=query, spaces='drive',
+                                         fields='files(id, name)').execute()
+    folders = results.get('files', [])
+
+    if folders:
+        # Folder exists, return the first one found
+        return folders[0]['id']
+    else:
+        # Create new folder
+        file_metadata = {
+            'name': folder_name,
+            'mimeType': 'application/vnd.google-apps.folder',
+            'parents': [parent_folder_id]
+        }
+        folder = drive_service.files().create(body=file_metadata,
+                                             fields='id').execute()
+        return folder.get('id')

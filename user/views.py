@@ -1,7 +1,7 @@
 import json
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
-from Investa.utils import send_otp_email, upload_video_to_drive, send_password_reset_email_custom, upload_image_to_drive
+from Investa.utils import send_otp_email, upload_video_to_drive, send_password_reset_email_custom, upload_image_to_drive, get_or_create_drive_folder
 from django.core.cache import cache
 from firebase_admin import auth, db
 from rest_framework.response import Response
@@ -110,9 +110,9 @@ def verify_otp(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-@api_view(['POST'])
+
+@api_view(['POST','GET'])
 def personal_data_list(request):
-    """Store personal data under user_id (from Firebase) instead of national_id."""
     ref = db.reference("personal_data")
 
     if request.method == 'GET':
@@ -128,12 +128,12 @@ def personal_data_list(request):
                 return JsonResponse({'error': 'User ID is required'}, status=400)
 
             # Check if user already has data
-            existing_data = ref.child(user_id).get()
+            existing_data = ref.child().get()
             if existing_data:
                 return JsonResponse({'error': 'Personal data already exists for this user'}, status=400)
 
             # Save the data
-            ref.child(user_id).set({
+            ref.child().set({
                 'full_name': body.get('full_name', '').strip(),
                 'national_id': body.get('national_number', '').strip(),
                 'phone_number': body.get('phone_number', '').strip(),
@@ -150,10 +150,11 @@ def personal_data_list(request):
 
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-@csrf_exempt
-def personal_data_detail(request, national_id):
-    """Fetch, update, or delete personal data by national ID."""
-    ref = db.reference("personal_data").child(national_id)
+
+@api_view(['PUT','GET'])
+def personal_data_detail(request, user_id):
+    """Fetch, update, or delete personal data by user ID."""
+    ref = db.reference("personal_data").child(user_id)
 
     if request.method == 'GET':
         data = ref.get()
@@ -327,34 +328,51 @@ def get_reels(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500) 
     
-
-@csrf_exempt
+@api_view(['POST'])
 def upload_national_card(request):
-    if request.method == 'POST':
-        try:
-            uploaded_file = request.FILES.get('image')
-            if not uploaded_file:
-                return JsonResponse({'error': 'No image provided.'}, status=400)
+    try:
+        front_national_card = request.FILES.get('id_front_card')
+        back_national_card = request.FILES.get('id_back_card')
+        user_id = request.data.get('user_id')  # or any unique user id you have
 
-            file_name = uploaded_file.name
-            folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"  # مجلد البطاقات القومية
+        if not front_national_card or not back_national_card or not user_id:
+            return JsonResponse({'error': 'Front, back images and user_id are required.'}, status=400)
 
-            image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
+        main_folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"
 
-            ref = db.reference("national_cards")
-            ref.push().set({"url": image_url})
+        # 1. Get or create user subfolder inside main folder
+        user_folder_id = get_or_create_drive_folder(user_id, parent_folder_id=main_folder_id)
 
-            return JsonResponse({'message': 'National card uploaded.', 'url': image_url})
+        # 2. Upload front image to user folder
+        front_file_name = front_national_card.name
+        front_image_url = upload_image_to_drive(front_national_card, front_file_name, user_folder_id)
 
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+        # 3. Upload back image to user folder
+        back_file_name = back_national_card.name
+        back_image_url = upload_image_to_drive(back_national_card, back_file_name, user_folder_id)
 
-    return JsonResponse({'error': 'Invalid request method.'}, status=405)
+        # 4. Save URLs in Firebase with username key
+        ref = db.reference("national_cards")
+        ref.push().set({
+            "user_id": user_id,
+            "front_url": front_image_url,
+            "back_url": back_image_url,
+        })
+
+        return JsonResponse({
+            'message': 'National card uploaded successfully.',
+            'front_url': front_image_url,
+            'back_url': back_image_url
+        })
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 
 @api_view(['POST'])
 def life_picture(request):
     try:
-        uploaded_file = request.FILES.get('image')
+        uploaded_file = request.FILES.get('user_face_capture')
         user_id = request.POST.get('user_id')  # Get user_id from form data
 
         if not uploaded_file:
@@ -377,4 +395,5 @@ def life_picture(request):
     except Exception as e:
         print("Error uploading life picture:", str(e))
         return JsonResponse({'error': str(e)}, status=500)
+
 
