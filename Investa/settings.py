@@ -157,6 +157,12 @@ EMAIL_HOST_USER = 'maisonayman12@gmail.com'   # Replace with your Gmail
 EMAIL_HOST_PASSWORD = 'wpcz hcoz gutp dtys'  # Use an App Password for security
 
 
+# Paymob Settings
+PAYMOB_API_KEY = "ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SmpiR0Z6Y3lJNklrMWxjbU5vWVc1MElpd2ljSEp2Wm1sc1pWOXdheUk2TVRBME9EazVOaXdpYm1GdFpTSTZJbWx1YVhScFlXd2lmUS50S0lWYnJTU1dWcHdESmYwMVY3MktiOUQtbDR6dXBEa2hreFhtbDJFVEJXWXhRbnRwSXhGSGlnQ19KT184ZHR2QWYxVlNYR3VTQjhmTnR6WDd4aDZ5UQ=="
+PAYMOB_IFRAME_ID = "926949"
+PAYMOB_INTEGRATION_ID = "5110028"
+
+
 # firebase settings
 
 import os

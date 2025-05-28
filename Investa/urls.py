@@ -34,7 +34,8 @@ from user.views import (
     get_reels,
     upload_national_card,
     send_reset_link,
-    reset_password_with_code
+    reset_password_with_code,
+    life_picture
 
 )
 
@@ -89,8 +90,9 @@ urlpatterns = [
     path('get_reels/', get_reels, name='get_reels'),
     path('send-reset-link/', send_reset_link, name='send_reset_link'),
     path('reset-password/', reset_password_with_code, name='reset-password'),
+    path('life-picture/', life_picture, name='life_picture'),
 
-
+ 
     # Founder endpoints
     path('insert-project/', insert_project, name='insert_project'),
     path('insert_business_details/', insert_business_details, name='insert_business_details'),

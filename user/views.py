@@ -172,9 +172,10 @@ def personal_data_detail(request, national_id):
                 'full_name': body.get('full_name') or old_data.get('full_name', ''),
                 'phone_number': body.get('phone_number') or old_data.get('phone_number', ''),
                 'birthdate': body.get('birthdate') or old_data.get('birthdate', '2000-01-01'),
-                'governor': body.get('governor') or old_data.get('governor', ''),
+                'country': body.get('country') or old_data.get('country', ''),
                 'postal_code': body.get('postal_code') or old_data.get('postal_code', ''),
-                'address': body.get('address') or  old_data.get('address', ''),
+                'address_1': body.get('address_1') or  old_data.get('address_1', ''),
+                'address_2': body.get('address_2') or  old_data.get('address_2', ''),
             }
 
             ref.update(updated_data)
@@ -246,34 +247,6 @@ def sign_in(request):
         return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
 
 
-'''@api_view(['POST'])
-def submit_review(request):
-    data = request.data
-
-    project_id = data.get('project_id')
-    name = data.get('name')
-    rating = data.get('rating')
-    comment = data.get('comment')
-
-    # Validate required fields
-    if not all([project_id, name, rating]):
-        return Response({"error": "project_id, name, and rating are required."}, status=400)
-
-    # Construct review object
-    review = {
-        "name": name,
-        "rating": rating,  # Integer from 1 to 5 (your frontend should convert stars to numbers)
-        "comment": comment or ""  # Optional comment
-    }
-
-    # Save to Firebase Realtime DB
-    try:
-        db.reference(f"projects/{project_id}/reviews").push(review)
-        return Response({"message": "Review submitted successfully."}, status=201)
-    except Exception as e:
-        return Response({"error": str(e)}, status=500)'''
-
-
 @api_view(['POST'])
 def send_reset_link(request):
     email = request.data.get('email')
@@ -331,7 +304,6 @@ def upload_video(request):
             os.remove(filename)
 
 
-
 @api_view(['GET'])
 def get_reels(request):
     """
@@ -378,3 +350,31 @@ def upload_national_card(request):
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method.'}, status=405)
+
+@api_view(['POST'])
+def life_picture(request):
+    try:
+        uploaded_file = request.FILES.get('image')
+        user_id = request.POST.get('user_id')  # Get user_id from form data
+
+        if not uploaded_file:
+            return JsonResponse({'error': 'No image provided.'}, status=400)
+        if not user_id:
+            return JsonResponse({'error': 'No user ID provided.'}, status=400)
+
+        import uuid
+        file_name = f"{uuid.uuid4()}_{uploaded_file.name}"
+        folder_id = "1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd"
+
+        image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
+
+        # Store under a user-specific path
+        ref = db.reference(f"life_picture/{user_id}")
+        ref.push().set({"url": image_url})
+
+        return JsonResponse({'message': 'Life picture uploaded.', 'url': image_url})
+
+    except Exception as e:
+        print("Error uploading life picture:", str(e))
+        return JsonResponse({'error': str(e)}, status=500)
+
