@@ -1,6 +1,5 @@
 import json
 from django.http import JsonResponse, HttpResponseBadRequest
-from django.views.decorators.csrf import csrf_exempt
 from Investa.utils import send_otp_email, upload_video_to_drive, send_password_reset_email_custom, upload_image_to_drive, get_or_create_drive_folder
 from django.core.cache import cache
 from firebase_admin import auth, db
@@ -12,6 +11,7 @@ import uuid
 from rest_framework import status
 from django.conf import settings
 import requests
+from rest_framework.views import APIView
 
 
 @api_view(['POST'])
@@ -111,87 +111,6 @@ def verify_otp(request):
         return JsonResponse({"error": str(e)}, status=400)
 
 
-@api_view(['POST','GET'])
-def personal_data_list(request):
-    ref = db.reference("personal_data")
-
-    if request.method == 'GET':
-        data = ref.get()
-        return JsonResponse(data if data else {}, status=200, safe=False)
-
-    elif request.method == 'POST':
-        try:
-            body = json.loads(request.body.decode('utf-8'))
-            user_id = body.get('user_id')  # user_id from Firebase Auth
-
-            if not user_id:
-                return JsonResponse({'error': 'User ID is required'}, status=400)
-
-            # Check if user already has data
-            existing_data = ref.child().get()
-            if existing_data:
-                return JsonResponse({'error': 'Personal data already exists for this user'}, status=400)
-
-            # Save the data
-            ref.child().set({
-                'full_name': body.get('full_name', '').strip(),
-                'national_id': body.get('national_number', '').strip(),
-                'phone_number': body.get('phone_number', '').strip(),
-                'birthdate': body.get('birthdate', '2000-01-01').strip(),
-                'country': body.get('country', '').strip(),
-                'postal_code': body.get('postal_code', '').strip(),
-                'address': body.get('address_1', '').strip(),
-                'address': body.get('address_2', '').strip()
-            })
-
-            return JsonResponse({'message': 'Personal data saved successfully'}, status=201)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
-
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
-
-
-@api_view(['PUT','GET'])
-def personal_data_detail(request, user_id):
-    """Fetch, update, or delete personal data by user ID."""
-    ref = db.reference("personal_data").child(user_id)
-
-    if request.method == 'GET':
-        data = ref.get()
-        if not data:
-            return JsonResponse({'error': 'User not found'}, status=404)
-        return JsonResponse(data, status=200)
-
-    elif request.method == 'PUT':
-        try:
-            body = json.loads(request.body.decode('utf-8'))
-            old_data = ref.get()
-            if not old_data:
-                return JsonResponse({'error': 'User not found'}, status=404)
-
-            updated_data = {
-                'full_name': body.get('full_name') or old_data.get('full_name', ''),
-                'phone_number': body.get('phone_number') or old_data.get('phone_number', ''),
-                'birthdate': body.get('birthdate') or old_data.get('birthdate', '2000-01-01'),
-                'country': body.get('country') or old_data.get('country', ''),
-                'postal_code': body.get('postal_code') or old_data.get('postal_code', ''),
-                'address_1': body.get('address_1') or  old_data.get('address_1', ''),
-                'address_2': body.get('address_2') or  old_data.get('address_2', ''),
-            }
-
-            ref.update(updated_data)
-
-            return JsonResponse({'message': 'Record updated successfully'}, status=200)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
-
-    elif request.method == 'DELETE':
-        ref.delete()
-        return JsonResponse({'message': 'Record deleted successfully'}, status=200)
-
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
-
-
 @api_view(['POST'])
 def sign_in(request):
     try:
@@ -246,6 +165,142 @@ def sign_in(request):
 
     except Exception as e:
         return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
+
+
+class PersonalDataList(APIView):
+    def get(self, request):
+        ref = db.reference("personal_data")
+        data = ref.get()
+        return Response(data if data else {}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        try:
+            body = request.data
+            user_id = body.get('user_id')
+            if not user_id:
+                return Response({'error': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference("personal_data").child(user_id)
+            if ref.get():
+                return Response({'error': 'Personal data already exists for this user'}, status=status.HTTP_400_BAD_REQUEST)
+
+            ref.set({
+                'full_name': body.get('full_name', '').strip(),
+                'national_id': body.get('national_number', '').strip(),
+                'phone_number': body.get('phone_number', '').strip(),
+                'birthdate': body.get('birthdate', '2000-01-01').strip(),
+                'country': body.get('country', '').strip(),
+                'postal_code': body.get('postal_code', '').strip(),
+                'address_1': body.get('address_1', '').strip(),
+                'address_2': body.get('address_2', '').strip(),
+            })
+
+            return Response({'message': 'Personal data saved successfully'}, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PersonalDataDetail(APIView):
+    def get(self, request, user_id):
+        ref = db.reference("personal_data").child(user_id)
+        data = ref.get()
+        if not data:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(data, status=status.HTTP_200_OK)
+
+    def put(self, request, user_id):
+        ref = db.reference("personal_data").child(user_id)
+        old_data = ref.get()
+        if not old_data:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        body = request.data
+        updated_data = {
+            'full_name': body.get('full_name', old_data.get('full_name', '')),
+            'phone_number': body.get('phone_number', old_data.get('phone_number', '')),
+            'birthdate': body.get('birthdate', old_data.get('birthdate', '2000-01-01')),
+            'country': body.get('country', old_data.get('country', '')),
+            'postal_code': body.get('postal_code', old_data.get('postal_code', '')),
+            'address_1': body.get('address_1', old_data.get('address_1', '')),
+            'address_2': body.get('address_2', old_data.get('address_2', '')),
+        }
+
+        ref.update(updated_data)
+        return Response({'message': 'Record updated successfully'}, status=status.HTTP_200_OK)
+
+    def delete(self, request, user_id):
+        ref = db.reference("personal_data").child(user_id)
+        ref.delete()
+        return Response({'message': 'Record deleted successfully'}, status=status.HTTP_200_OK)
+
+    
+@api_view(['POST'])
+def upload_national_card(request):
+    try:
+        front_national_card = request.FILES.get('id_front_card')
+        back_national_card = request.FILES.get('id_back_card')
+        user_id = request.data.get('user_id')  # or any unique user id you have
+
+        if not front_national_card or not back_national_card or not user_id:
+            return JsonResponse({'error': 'Front, back images and user_id are required.'}, status=400)
+
+        main_folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"
+
+        # 1. Get or create user subfolder inside main folder
+        user_folder_id = get_or_create_drive_folder(user_id, parent_folder_id=main_folder_id)
+
+        # 2. Upload front image to user folder
+        front_file_name = front_national_card.name
+        front_image_url = upload_image_to_drive(front_national_card, front_file_name, user_folder_id)
+
+        # 3. Upload back image to user folder
+        back_file_name = back_national_card.name
+        back_image_url = upload_image_to_drive(back_national_card, back_file_name, user_folder_id)
+
+        # 4. Save URLs in Firebase with username key
+        ref = db.reference("national_cards")
+        ref.push().set({
+            "user_id": user_id,
+            "front_url": front_image_url,
+            "back_url": back_image_url,
+        })
+
+        return JsonResponse({
+            'message': 'National card uploaded successfully.',
+            'front_url': front_image_url,
+            'back_url': back_image_url
+        })
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+def life_picture(request):
+    try:
+        uploaded_file = request.FILES.get('user_face_capture')
+        user_id = request.POST.get('user_id')  # Get user_id from form data
+
+        if not uploaded_file:
+            return JsonResponse({'error': 'No image provided.'}, status=400)
+        if not user_id:
+            return JsonResponse({'error': 'No user ID provided.'}, status=400)
+
+        import uuid
+        file_name = f"{uuid.uuid4()}_{uploaded_file.name}"
+        folder_id = "1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd"
+
+        image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
+
+        # Store under a user-specific path
+        ref = db.reference(f"life_picture/{user_id}")
+        ref.push().set({"url": image_url})
+
+        return JsonResponse({'message': 'Life picture uploaded.', 'url': image_url})
+
+    except Exception as e:
+        print("Error uploading life picture:", str(e))
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -327,73 +382,3 @@ def get_reels(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500) 
-    
-@api_view(['POST'])
-def upload_national_card(request):
-    try:
-        front_national_card = request.FILES.get('id_front_card')
-        back_national_card = request.FILES.get('id_back_card')
-        user_id = request.data.get('user_id')  # or any unique user id you have
-
-        if not front_national_card or not back_national_card or not user_id:
-            return JsonResponse({'error': 'Front, back images and user_id are required.'}, status=400)
-
-        main_folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"
-
-        # 1. Get or create user subfolder inside main folder
-        user_folder_id = get_or_create_drive_folder(user_id, parent_folder_id=main_folder_id)
-
-        # 2. Upload front image to user folder
-        front_file_name = front_national_card.name
-        front_image_url = upload_image_to_drive(front_national_card, front_file_name, user_folder_id)
-
-        # 3. Upload back image to user folder
-        back_file_name = back_national_card.name
-        back_image_url = upload_image_to_drive(back_national_card, back_file_name, user_folder_id)
-
-        # 4. Save URLs in Firebase with username key
-        ref = db.reference("national_cards")
-        ref.push().set({
-            "user_id": user_id,
-            "front_url": front_image_url,
-            "back_url": back_image_url,
-        })
-
-        return JsonResponse({
-            'message': 'National card uploaded successfully.',
-            'front_url': front_image_url,
-            'back_url': back_image_url
-        })
-
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-
-@api_view(['POST'])
-def life_picture(request):
-    try:
-        uploaded_file = request.FILES.get('user_face_capture')
-        user_id = request.POST.get('user_id')  # Get user_id from form data
-
-        if not uploaded_file:
-            return JsonResponse({'error': 'No image provided.'}, status=400)
-        if not user_id:
-            return JsonResponse({'error': 'No user ID provided.'}, status=400)
-
-        import uuid
-        file_name = f"{uuid.uuid4()}_{uploaded_file.name}"
-        folder_id = "1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd"
-
-        image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
-
-        # Store under a user-specific path
-        ref = db.reference(f"life_picture/{user_id}")
-        ref.push().set({"url": image_url})
-
-        return JsonResponse({'message': 'Life picture uploaded.', 'url': image_url})
-
-    except Exception as e:
-        print("Error uploading life picture:", str(e))
-        return JsonResponse({'error': str(e)}, status=500)
-
-

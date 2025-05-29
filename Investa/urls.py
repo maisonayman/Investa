@@ -25,8 +25,8 @@ from investor import views
 from user.views import (
     request_otp,
     verify_otp,
-    personal_data_detail,
-    personal_data_list,
+    PersonalDataList,
+    PersonalDataDetail,
     sign_in,
     #submit_review,
     #request_password_reset,
@@ -81,8 +81,8 @@ urlpatterns = [
     # User endpoints
     path('request-otp/', request_otp, name='request_otp'),
     path('verify-otp/', verify_otp, name='verify_otp'),
-    path('personal-data-list/', personal_data_list, name='personal_data_list'),
-    path('personal-data-detail/<str:user_id>/', personal_data_detail, name='personal_data_detail'),
+     path('personal-data/', PersonalDataList.as_view(), name='personal-data-list'),
+    path('personal-data/<str:user_id>/', PersonalDataDetail.as_view(), name='personal-data-detail'),
     path('sign-in/', sign_in, name='sign_in'),
     #path('submit_review/', submit_review, name='submit_review'),
     #path('request_password_reset/', request_password_reset, name='request_password_reset'),
@@ -127,3 +127,4 @@ urlpatterns = [
 
 
 ]
+

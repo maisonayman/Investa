@@ -31,13 +31,6 @@ def interests(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
     
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from django.conf import settings
-from datetime import datetime
-import requests
-import firebase_admin
-from firebase_admin import db
 
 @api_view(['POST'])
 def initiate_payment(request):
@@ -111,7 +104,6 @@ def initiate_payment(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)
-
 
 
 @api_view(['POST'])
