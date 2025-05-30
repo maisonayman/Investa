@@ -14,6 +14,8 @@ import requests
 from rest_framework.views import APIView
 
 
+
+
 @api_view(['POST'])
 def request_otp(request):
     """Send OTP and temporarily store user details using Firebase-generated ID."""
@@ -166,10 +168,9 @@ def sign_in(request):
     except Exception as e:
         return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
 
-
 class PersonalDataList(APIView):
     def get(self, request):
-        ref = db.reference("personal_data")
+        ref = db.reference("users")
         data = ref.get()
         return Response(data if data else {}, status=status.HTTP_200_OK)
 
@@ -180,11 +181,11 @@ class PersonalDataList(APIView):
             if not user_id:
                 return Response({'error': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-            ref = db.reference("personal_data").child(user_id)
-            if ref.get():
-                return Response({'error': 'Personal data already exists for this user'}, status=status.HTTP_400_BAD_REQUEST)
+            # الإشارة لبيانات المستخدم داخل جدول users
+            ref = db.reference("users").child(user_id)
 
-            ref.set({
+            # تحديث فقط بدون مسح باقي البيانات
+            ref.update({
                 'full_name': body.get('full_name', '').strip(),
                 'national_id': body.get('national_number', '').strip(),
                 'phone_number': body.get('phone_number', '').strip(),
@@ -195,7 +196,8 @@ class PersonalDataList(APIView):
                 'address_2': body.get('address_2', '').strip(),
             })
 
-            return Response({'message': 'Personal data saved successfully'}, status=status.HTTP_201_CREATED)
+            return Response({'message': 'Personal data updated successfully'}, status=status.HTTP_201_CREATED)
+
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -293,8 +295,8 @@ def life_picture(request):
         image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
 
         # Store under a user-specific path
-        ref = db.reference(f"life_picture/{user_id}")
-        ref.push().set({"url": image_url})
+        ref = db.reference(f"users/{user_id}")
+        ref.update({"profile_picture": image_url})
 
         return JsonResponse({'message': 'Life picture uploaded.', 'url': image_url})
 
@@ -382,3 +384,35 @@ def get_reels(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500) 
+
+
+
+
+@api_view(['POST'])
+def user_profile_details_update(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON in request body'}, status=400)
+
+    user_id = data.get('user_id')
+    if not user_id:
+        return JsonResponse({'error': 'User ID is required.'}, status=400)
+
+    update_data = {
+        "gender": data.get('gender'),
+        "employmentStatus": data.get('employment_status'),
+        "primarySourceOfFund": data.get('primary_source_of_fund'),
+        "monthlyIncome": data.get('monthly_income'),
+        "monthlySave": data.get('monthly_save'),
+    }
+
+    update_data = {k: v for k, v in update_data.items() if v is not None}
+
+    try:
+        user_ref = db.reference('users').child(str(user_id))
+        user_ref.update(update_data)
+        return JsonResponse({"message": "User profile details updated successfully."}, status=200)
+    except Exception as e:
+        print(f"Error updating user profile details: {e}")
+        return JsonResponse({"error": "Failed to update profile details.", "details": str(e)}, status=500)

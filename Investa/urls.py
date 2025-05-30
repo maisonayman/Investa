@@ -35,7 +35,8 @@ from user.views import (
     upload_national_card,
     send_reset_link,
     reset_password_with_code,
-    life_picture
+    life_picture, 
+    user_profile_details_update
 
 )
 
@@ -81,7 +82,7 @@ urlpatterns = [
     # User endpoints
     path('request-otp/', request_otp, name='request_otp'),
     path('verify-otp/', verify_otp, name='verify_otp'),
-     path('personal-data/', PersonalDataList.as_view(), name='personal-data-list'),
+    path('personal-data/', PersonalDataList.as_view(), name='personal-data-list'),
     path('personal-data/<str:user_id>/', PersonalDataDetail.as_view(), name='personal-data-detail'),
     path('sign-in/', sign_in, name='sign_in'),
     #path('submit_review/', submit_review, name='submit_review'),
@@ -91,7 +92,9 @@ urlpatterns = [
     path('send-reset-link/', send_reset_link, name='send_reset_link'),
     path('reset-password/', reset_password_with_code, name='reset-password'),
     path('life-picture/', life_picture, name='life_picture'),
-    path('upload-national-card/', upload_national_card, name='upload-national-card'), 
+    path('upload-national-card/', upload_national_card, name='upload-national-card'),
+    path('account-verificiation/',  user_profile_details_update, name='account_verificiation'), 
+ 
 
  
     # Founder endpoints

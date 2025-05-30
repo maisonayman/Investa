@@ -38,8 +38,12 @@ def initiate_payment(request):
     amount = int(data.get("amount", 0)) * 100  
     user_id = data.get("user_id")
     project_id = data.get("project_id")
+    bank = data.get("bank")
+    term = data.get("term")  # "short" or "long"
+    charge = data.get("charge")
+    total_amount = data.get("total_amount")
 
-    if not all([amount, user_id, project_id]):
+    if not all([amount, user_id, project_id, bank, term, charge, total_amount]):
         return Response({"error": "Missing fields"}, status=400)
 
     try:
@@ -94,6 +98,10 @@ def initiate_payment(request):
             "project_id": project_id,
             "order_id": order_id,
             "amount": amount / 100,
+            "total_amount": total_amount,
+            "charge": charge,
+            "bank": bank,
+            "term": term,
             "status": "pending",
             "payment_token": payment_token,
             "iframe_url": iframe_url,
