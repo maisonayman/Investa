@@ -7,6 +7,10 @@ from Investa.utils import upload_image_to_drive, upload_video_to_drive, upload_f
 import os
 from rest_framework import status
 from django.conf import settings
+<<<<<<< HEAD
+=======
+from django.http import JsonResponse
+>>>>>>> 0d888d36df8110df0fc53ea293c02b38dc3173fe
 
 
 @api_view(['POST'])
@@ -104,6 +108,86 @@ def insert_business_details(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+<<<<<<< HEAD
+=======
+@api_view(['GET'])
+def search_projects(request):
+    """Search projects based on query parameters."""
+    try:
+        # Get search parameters
+        search_query = request.GET.get('q', '').lower()  # Search term
+        category = request.GET.get('category', '').lower()  # Category filter
+        min_investment = request.GET.get('min_investment')  # Minimum investment amount
+        max_investment = request.GET.get('max_investment')  # Maximum investment amount
+        
+        # Get all projects from Firebase
+        projects_ref = db.reference('full_projects')
+        all_projects = projects_ref.get()
+        
+        if not all_projects:
+            return JsonResponse({"projects": []}, status=200)
+        
+        # Convert to list and add project IDs
+        projects_list = []
+        for project_id, project in all_projects.items():
+            project['id'] = project_id
+            projects_list.append(project)
+        
+        # Filter projects based on search criteria
+        filtered_projects = []
+        for project in projects_list:
+            # Search in relevant fields
+            company_name = project.get('company_name', '').lower()
+            service = project.get('service', '').lower()
+            brief_desc = project.get('brief_desc', '').lower()
+            business_type = project.get('business_type', '').lower()
+            
+            # Check if project matches search query
+            matches_query = (
+                search_query in company_name or
+                search_query in service or
+                search_query in brief_desc or
+                search_query in business_type
+            )
+            
+            # Check category if specified
+            matches_category = True
+            if category:
+                project_category = project.get('business_type', '').lower()
+                matches_category = category in project_category
+            
+            # Check investment range if specified
+            matches_investment = True
+            if min_investment or max_investment:
+                investment = float(project.get('required_amount_of_investment', 0))
+                if min_investment and investment < float(min_investment):
+                    matches_investment = False
+                if max_investment and investment > float(max_investment):
+                    matches_investment = False
+            
+            # Add project if it matches all criteria
+            if matches_query and matches_category and matches_investment:
+                # Create a simplified project object with only the required fields
+                simplified_project = {
+                    'id': project.get('id'),
+                    'name': project.get('company_name'),
+                    'image': project.get('image'),
+                    'description': project.get('brief_desc'),
+                    'investors': project.get('investors', []),
+                    'amount_invested': project.get('required_amount_of_investment')
+                }
+                filtered_projects.append(simplified_project)
+        
+        return JsonResponse({
+            "projects": filtered_projects,
+            "total": len(filtered_projects)
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+>>>>>>> 0d888d36df8110df0fc53ea293c02b38dc3173fe
 
 
     

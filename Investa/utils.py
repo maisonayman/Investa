@@ -8,6 +8,7 @@ import io
 from googleapiclient.http import MediaIoBaseUpload
 from firebase_admin import auth
 
+
 # تحميل credentials من settings
 drive_service = build(
     'drive', 'v3', credentials=settings.GOOGLE_CREDENTIALS
@@ -80,6 +81,7 @@ def upload_video_to_drive(file_path, file_name, folder_id):
 
 
 def upload_image_to_drive(file_obj, file_name, folder_id):
+
   
     try:
         service = build("drive", "v3", credentials=settings.GOOGLE_CREDENTIALS)
@@ -102,6 +104,7 @@ def upload_image_to_drive(file_obj, file_name, folder_id):
 
     except Exception as e:
         raise Exception(f"Error uploading image to Google Drive: {e}")
+
 
 
 def upload_file_to_drive(file_path, file_name):
@@ -136,6 +139,27 @@ def upload_file_to_drive(file_path, file_name):
         return ""
 
 
+def send_password_reset_email_custom(email):
+    try:
+        action_code_settings = auth.ActionCodeSettings(
+            url="https://ff5d-37-19-208-83.ngrok-free.app/reset-password/",  # هنا حطي رابط الفرونت أو flutter لو mobile
+            handle_code_in_app=True
+        )
+
+        link = auth.generate_password_reset_link(email, action_code_settings)
+
+        subject = "Reset Your Password"
+        message = f"Click the link below to reset your password:\n\n{link}"
+        sender = "no-reply@investa812.web.app"
+        recipient = [email]
+
+        send_mail(subject, message, sender, recipient)
+        return True
+
+    except Exception as e:
+        raise Exception(f"Error sending password reset email: {e}")
+
+
 def get_or_create_drive_folder(folder_name, parent_folder_id):
     """
     Check if folder with folder_name exists inside parent_folder_id.
@@ -160,5 +184,5 @@ def get_or_create_drive_folder(folder_name, parent_folder_id):
             'parents': [parent_folder_id]
         }
         folder = drive_service.files().create(body=file_metadata,
-                                             fields='id').execute()
+        fields='id').execute()
         return folder.get('id')

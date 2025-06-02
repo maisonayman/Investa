@@ -31,6 +31,16 @@ def interests(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
     
+<<<<<<< HEAD
+=======
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.conf import settings
+from datetime import datetime
+import requests
+import firebase_admin
+from firebase_admin import db
+>>>>>>> 0d888d36df8110df0fc53ea293c02b38dc3173fe
 
 @api_view(['POST'])
 def initiate_payment(request):
@@ -38,12 +48,17 @@ def initiate_payment(request):
     amount = int(data.get("amount", 0)) * 100  
     user_id = data.get("user_id")
     project_id = data.get("project_id")
+<<<<<<< HEAD
     bank = data.get("bank")
     term = data.get("term")  # "short" or "long"
     charge = data.get("charge")
     total_amount = data.get("total_amount")
 
     if not all([amount, user_id, project_id, bank, term, charge, total_amount]):
+=======
+
+    if not all([amount, user_id, project_id]):
+>>>>>>> 0d888d36df8110df0fc53ea293c02b38dc3173fe
         return Response({"error": "Missing fields"}, status=400)
 
     try:
@@ -98,10 +113,13 @@ def initiate_payment(request):
             "project_id": project_id,
             "order_id": order_id,
             "amount": amount / 100,
+<<<<<<< HEAD
             "total_amount": total_amount,
             "charge": charge,
             "bank": bank,
             "term": term,
+=======
+>>>>>>> 0d888d36df8110df0fc53ea293c02b38dc3173fe
             "status": "pending",
             "payment_token": payment_token,
             "iframe_url": iframe_url,
@@ -114,6 +132,10 @@ def initiate_payment(request):
         return Response({"error": str(e)}, status=500)
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 0d888d36df8110df0fc53ea293c02b38dc3173fe
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def paymob_callback(request):
