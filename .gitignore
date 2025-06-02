@@ -1,0 +1,6 @@
+ourenv/
+__pycache__/
+*.pyc
+.env
+firebase_config.json
+investakey.json
