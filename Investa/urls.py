@@ -60,7 +60,8 @@ from investor.views import (
     investment_types,
     businesses_invested_in,
     initiate_payment,
-    paymob_callback
+    paymob_callback,
+    search_projects
 )
 
 from web.views import monthly_finance_firebase_view, add_monthly_finance
@@ -117,6 +118,7 @@ urlpatterns = [
     path('get-category-percentages/<str:user_id>/', get_category_percentages, name='get_category_percentages'),
     path('initiate-payment/', initiate_payment, name='initiate_payment'),
     path('paymob-callback/', paymob_callback, name='paymob_callback'),
+    path('search/', search_projects, name='search'),
 
 
     # Web endpoints
