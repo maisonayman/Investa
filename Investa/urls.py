@@ -36,8 +36,8 @@ from user.views import (
     send_reset_link,
     reset_password_with_code,
     life_picture, 
-    user_profile_details_update
-
+    user_profile_details_update,
+    user_investment_details_submit
 )
 
 # Founder app views
@@ -94,7 +94,8 @@ urlpatterns = [
     path('life-picture/', life_picture, name='life_picture'),
     path('upload-national-card/', upload_national_card, name='upload-national-card'),
     path('account-verificiation/',  user_profile_details_update, name='account_verificiation'), 
- 
+    path('account-verificiation-2/',  user_investment_details_submit, name='account_verificiation'), 
+
 
  
     # Founder endpoints

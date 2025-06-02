@@ -4,7 +4,7 @@ from Investa.utils import send_otp_email, upload_video_to_drive, send_password_r
 from django.core.cache import cache
 from firebase_admin import auth, db
 from rest_framework.response import Response
-from rest_framework.decorators import api_view, parser_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 import os
 import uuid
@@ -12,7 +12,7 @@ from rest_framework import status
 from django.conf import settings
 import requests
 from rest_framework.views import APIView
-
+from datetime import datetime
 
 
 
@@ -167,6 +167,7 @@ def sign_in(request):
 
     except Exception as e:
         return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
+
 
 class PersonalDataList(APIView):
     def get(self, request):
@@ -332,6 +333,7 @@ def reset_password_with_code(request):
     except Exception as e:
         return Response({"error": str(e)}, status=400)
 
+
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def upload_video(request):
@@ -386,8 +388,6 @@ def get_reels(request):
         return Response({"error": str(e)}, status=500) 
 
 
-
-
 @api_view(['POST'])
 def user_profile_details_update(request):
     try:
@@ -416,3 +416,30 @@ def user_profile_details_update(request):
     except Exception as e:
         print(f"Error updating user profile details: {e}")
         return JsonResponse({"error": "Failed to update profile details.", "details": str(e)}, status=500)
+
+
+
+@api_view(['POST'])
+def user_investment_details_submit(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except json.JSONDecodeError:
+        return Response({'error': 'Invalid JSON in request body'}, status=400)
+
+    # استخراج البيانات الخاصة بالاستثمار
+    investment_data = {
+        "investment_type": data.get('investment_term'),
+        "purpose_investment": data.get('description'),
+        "submitted_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+
+    # حذف الفارغ
+    investment_data = {k: v for k, v in investment_data.items() if v is not None}
+
+    try:
+        # تخزين البيانات في نفس جدول profile_submissions
+        db.reference('profile_submissions').push(investment_data)
+        return Response({"message": "Investment details submitted successfully."}, status=200)
+    except Exception as e:
+        print(f"Error saving investment details: {e}")
+        return Response({"error": "Failed to submit investment data.", "details": str(e)}, status=500)
