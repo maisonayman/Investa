@@ -15,7 +15,6 @@ from rest_framework.views import APIView
 from datetime import datetime
 
 
-
 @api_view(['POST'])
 def request_otp(request):
     """Send OTP and temporarily store user details using Firebase-generated ID."""
@@ -178,15 +177,14 @@ class PersonalDataList(APIView):
     def post(self, request):
         try:
             body = request.data
-            user_id = body.get('user_id')
-            if not user_id:
-                return Response({'error': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # الإشارة لبيانات المستخدم داخل جدول users
-            ref = db.reference("users").child(user_id)
+            # ❌ user_id is NOT required anymore
+            # user_id = body.get('user_id')
 
-            # تحديث فقط بدون مسح باقي البيانات
-            ref.update({
+            # ✅ Store data under a random push key in "users"
+            ref = db.reference("users").push()
+
+            ref.set({
                 'full_name': body.get('full_name', '').strip(),
                 'national_id': body.get('national_number', '').strip(),
                 'phone_number': body.get('phone_number', '').strip(),
@@ -197,7 +195,7 @@ class PersonalDataList(APIView):
                 'address_2': body.get('address_2', '').strip(),
             })
 
-            return Response({'message': 'Personal data updated successfully'}, status=status.HTTP_201_CREATED)
+            return Response({'message': 'Personal data saved.'}, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -236,40 +234,39 @@ class PersonalDataDetail(APIView):
         ref.delete()
         return Response({'message': 'Record deleted successfully'}, status=status.HTTP_200_OK)
 
-    
+
 @api_view(['POST'])
 def upload_national_card(request):
     try:
-        front_national_card = request.FILES.get('id_front_card')
-        back_national_card = request.FILES.get('id_back_card')
-        user_id = request.data.get('user_id')  # or any unique user id you have
+        front_national_card = request.FILES.get('id_front_image')
+        back_national_card = request.FILES.get('id_back_image')
 
-        if not front_national_card or not back_national_card or not user_id:
-            return JsonResponse({'error': 'Front, back images and user_id are required.'}, status=400)
+        # ❌ user_id is not required anymore
+        # user_id = request.data.get('user_id')
+
+        if not front_national_card or not back_national_card:
+            return JsonResponse({'error': 'Front and back images are required.'}, status=400)
 
         main_folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"
 
-        # 1. Get or create user subfolder inside main folder
-        user_folder_id = get_or_create_drive_folder(user_id, parent_folder_id=main_folder_id)
+        import uuid
+        anonymous_folder_name = str(uuid.uuid4())  # Create random folder for unknown users
+        user_folder_id = get_or_create_drive_folder(anonymous_folder_name, parent_folder_id=main_folder_id)
 
-        # 2. Upload front image to user folder
         front_file_name = front_national_card.name
         front_image_url = upload_image_to_drive(front_national_card, front_file_name, user_folder_id)
 
-        # 3. Upload back image to user folder
         back_file_name = back_national_card.name
         back_image_url = upload_image_to_drive(back_national_card, back_file_name, user_folder_id)
 
-        # 4. Save URLs in Firebase with username key
         ref = db.reference("national_cards")
         ref.push().set({
-            "user_id": user_id,
             "front_url": front_image_url,
             "back_url": back_image_url,
         })
 
         return JsonResponse({
-            'message': 'National card uploaded successfully.',
+            'message': 'National card uploaded.',
             'front_url': front_image_url,
             'back_url': back_image_url
         })
@@ -281,13 +278,13 @@ def upload_national_card(request):
 @api_view(['POST'])
 def life_picture(request):
     try:
-        uploaded_file = request.FILES.get('user_face_capture')
-        user_id = request.POST.get('user_id')  # Get user_id from form data
+        uploaded_file = request.FILES.get('image')
+
+        # ❌ No user_id required
+        # user_id = request.POST.get('user_id')
 
         if not uploaded_file:
             return JsonResponse({'error': 'No image provided.'}, status=400)
-        if not user_id:
-            return JsonResponse({'error': 'No user ID provided.'}, status=400)
 
         import uuid
         file_name = f"{uuid.uuid4()}_{uploaded_file.name}"
@@ -295,9 +292,9 @@ def life_picture(request):
 
         image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
 
-        # Store under a user-specific path
-        ref = db.reference(f"users/{user_id}")
-        ref.update({"profile_picture": image_url})
+        # ✅ Save the image somewhere general, not under users/<id>
+        ref = db.reference("life_pictures")
+        ref.push().set({"profile_picture": image_url})
 
         return JsonResponse({'message': 'Life picture uploaded.', 'url': image_url})
 
@@ -395,29 +392,23 @@ def user_profile_details_update(request):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON in request body'}, status=400)
 
-    user_id = data.get('user_id')
-    if not user_id:
-        return JsonResponse({'error': 'User ID is required.'}, status=400)
-
     update_data = {
         "gender": data.get('gender'),
         "employmentStatus": data.get('employment_status'),
         "primarySourceOfFund": data.get('primary_source_of_fund'),
         "monthlyIncome": data.get('monthly_income'),
         "monthlySave": data.get('monthly_save'),
+        "submitted_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
 
     update_data = {k: v for k, v in update_data.items() if v is not None}
 
     try:
-        user_ref = db.reference('users').child(str(user_id))
-        user_ref.update(update_data)
-        return JsonResponse({"message": "User profile details updated successfully."}, status=200)
+        db.reference('anonymous_profiles').push(update_data)
+        return JsonResponse({"message": "Anonymous profile details saved successfully."}, status=200)
     except Exception as e:
-        print(f"Error updating user profile details: {e}")
-        return JsonResponse({"error": "Failed to update profile details.", "details": str(e)}, status=500)
-
-
+        print(f"Error saving profile details: {e}")
+        return JsonResponse({"error": "Failed to save profile details.", "details": str(e)}, status=500)
 
 @api_view(['POST'])
 def user_investment_details_submit(request):
@@ -426,20 +417,19 @@ def user_investment_details_submit(request):
     except json.JSONDecodeError:
         return Response({'error': 'Invalid JSON in request body'}, status=400)
 
-    # استخراج البيانات الخاصة بالاستثمار
     investment_data = {
         "investment_type": data.get('investment_term'),
         "purpose_investment": data.get('description'),
         "submitted_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
 
-    # حذف الفارغ
     investment_data = {k: v for k, v in investment_data.items() if v is not None}
 
     try:
-        # تخزين البيانات في نفس جدول profile_submissions
-        db.reference('profile_submissions').push(investment_data)
-        return Response({"message": "Investment details submitted successfully."}, status=200)
+        db.reference('anonymous_investments').push(investment_data)
+        return Response({"message": "Investment details saved anonymously."}, status=200)
     except Exception as e:
         print(f"Error saving investment details: {e}")
         return Response({"error": "Failed to submit investment data.", "details": str(e)}, status=500)
+
+

@@ -8,6 +8,8 @@ import os
 from rest_framework import status
 from django.conf import settings
 from django.http import JsonResponse
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 
 
 @api_view(['POST'])
@@ -103,21 +105,39 @@ def insert_business_details(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def create_project(request):
     data = request.data
     files = request.FILES
-    project_id = str(uuid.uuid4())
+    project_id = str(uuid.uuid4())  # ONE ID for all sections
 
     try:
+        # --- Upload logo
         project_logo_url = ""
         if "projectLogoFileName" in files:
             project_logo_url = upload_image_to_drive(
-                files["projectLogoFileName"], f"{project_id}_project_logo.jpg", folder_id=settings.FOLDER_ID_FOR_PROJECT_PIC
+                files["projectLogoFileName"],
+                f"{project_id}_project_logo.jpg",
+                folder_id=settings.FOLDER_ID_FOR_PROJECT_PIC
             )
 
+        # --- Upload media files
+        def upload_optional_file(field_name, filename_suffix):
+            file = files.get(field_name)
+            if file:
+                return upload_image_to_drive(
+                    file,
+                    f"{project_id}_{filename_suffix}",
+                    folder_id=settings.FOLDER_ID_FOR_PROJECT_PIC
+                )
+            return ""
+
+        commercial_reg_url = upload_optional_file("commercialRegFile", "commercial_reg.pdf")
+        financial_summary_url = upload_optional_file("financialSummaryFile", "financial_summary.pdf")
+        business_plan_url = upload_optional_file("simplifiedBusinessPlanFile", "business_plan.pdf")
+
+        # --- Project Info
         project_info = {
             "projectName": data.get("projectName"),
             "briefDescription": data.get("briefDescription"),
@@ -127,44 +147,9 @@ def create_project(request):
             "geographicalLocation": data.get("geographicalLocation"),
             "teamSize": data.get("teamSize"),
             "projectLogoUrl": project_logo_url,
-
-            # القسم المالي
-            "annualRevenue": data.get("annualRevenue"),
-            "monthlyGrowthRate": data.get("monthlyGrowthRate"),
-            "netProfit": data.get("netProfit"),
-            "currentCustomers": data.get("currentCustomers"),
-            "repeatPurchaseRate": data.get("repeatPurchaseRate"),
-            "numberOfBranches": data.get("numberOfBranches"),
-            "customerGrowthRate": data.get("customerGrowthRate"),
-            "churnRate": data.get("churnRate"),
-            "monthlyOperatingCosts": data.get("monthlyOperatingCosts"),
-            "debtToEquityRatio": data.get("debtToEquityRatio"),
-            "fundingNeeded": data.get("fundingNeeded"),
-            "ownershipPercentage": data.get("ownershipPercentage"),
-            "investmentType": data.get("investmentType"),
-            "totalInvestorsAllowed": data.get("totalInvestorsAllowed"),
-            "maxInvestorShort": data.get("maxInvestorShort"),
-            "maxInvestorLong": data.get("maxInvestorLong"),
         }
 
-        db.reference(f'projects/{project_id}').set(project_info)
-
-        return Response({"message": "تم إنشاء المشروع بنجاح", "projectId": project_id})
-    
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-
-@api_view(['POST'])
-def create_analysis(request):
-    data = request.data
-    analysis_id = str(uuid.uuid4())
-    project_id = data.get("projectId")
-
-    if not project_id:
-        return Response({"error": "يجب إرسال projectId"}, status=400)
-
-    try:
+        # --- Analysis Info
         analysis_info = {
             "projectId": project_id,
             "strengths": data.get("strengths"),
@@ -177,36 +162,7 @@ def create_analysis(request):
             "competitors": data.get("competitors"),
         }
 
-        db.reference(f'analysis/{analysis_id}').set(analysis_info)
-
-        return Response({"message": "تم حفظ تحليل المشروع", "analysisId": analysis_id})
-    
-    except Exception as e:
-        return Response({"error": str(e)}, status=500)
-    
-
-@api_view(['POST'])
-@parser_classes([MultiPartParser, FormParser])
-def create_media_and_attachments(request):
-    data = request.data
-    files = request.FILES
-    media_id = str(uuid.uuid4())
-    project_id = data.get("projectId")
-
-    if not project_id:
-        return Response({"error": "يجب إرسال projectId"}, status=400)
-
-    try:
-        def upload_optional_file(field_name, filename_prefix):
-            file = files.get(field_name)
-            if file:
-                return upload_image_to_drive(file, f"{media_id}_{filename_prefix}", folder_id=settings.FOLDER_ID_FOR_PROJECT_PIC)
-            return ""
-
-        commercial_reg_url = upload_optional_file("commercialRegFile", "commercial_reg.pdf")
-        financial_summary_url = upload_optional_file("financialSummaryFile", "financial_summary.pdf")
-        business_plan_url = upload_optional_file("simplifiedBusinessPlanFile", "business_plan.pdf")
-
+        # --- Media Info
         media_info = {
             "projectId": project_id,
             "photosVideosMedia": data.get("photosVideosMedia"),
@@ -219,11 +175,85 @@ def create_media_and_attachments(request):
             "simplifiedBusinessPlanFileUrl": business_plan_url,
         }
 
-        db.reference(f'media_and_attachments/{media_id}').set(media_info)
+        # --- Save to Firebase using the same ID
+        db.reference(f'projects/{project_id}').set(project_info)
+        db.reference(f'analysis/{project_id}').set(analysis_info)
+        db.reference(f'media_and_attachments/{project_id}').set(media_info)
 
-        return Response({"message": "تم رفع المرفقات بنجاح", "mediaId": media_id})
-    
+        return Response({
+            "message": "تم حفظ المشروع بنجاح في 3 جداول باستخدام نفس المعرف",
+            "projectId": project_id
+        })
+
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
+
+@api_view(['POST'])
+def send_phase3_email(request):
+    data = request.data
+    email = data.get('email')
+    user_id = data.get('user_id')  # optional for tracking
+
+    if not email:
+        return Response({"error": "Email is required"}, status=400)
+
+    # Render the email HTML
+    html_content = render_to_string('emails/phase3_email.html', {
+        'upload_link': f'https://yourdomain.com/upload-phase1/?user={user_id or ""}'
+    })
+
+    subject = "Phase 3: Upload Your Physical Store Picture"
+    from_email = settings.DEFAULT_FROM_EMAIL
+    to = [email]
+
+    try:
+        msg = EmailMultiAlternatives(subject, "", from_email, to)
+        msg.attach_alternative(html_content, "text/html")
+        msg.send()
+        return Response({"message": "Phase 3 email sent successfully."}, status=200)
+    except Exception as e:
+        return Response({"error": "Failed to send email", "details": str(e)}, status=500)
+
+
+
+@api_view(['GET'])
+def founder_home(request, project_id):
+    """Get project's name and project picture from Firebase."""
+    try:
+        # Get user data from Firebase Realtime Database
+        projects_ref = db.reference("projects")
+        project_data = projects_ref.child(project_id).get()
+        
+        if not project_data:
+            return JsonResponse({"error": "project not found"}, status=404)
+        
+        # Get user's profile picture URL from Firebase
+        project_pic_url = project_data.get('project_picture', '')  # Changed from profile_picture_url to profile_picture
+        
+        response_data = {
+            "project_name": project_data.get('project_name', ''),
+            "project_picture": project_pic_url
+        }
+        
+        return JsonResponse(response_data, status=200)
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+
+@api_view(['GET'])
+def get_project_by_id(request, project_id):
+    try:
+        # Get project data from Firebase Realtime Database
+        project_ref = db.reference(f'projects/{project_id}')
+        project_data = project_ref.get()
+
+        if project_data:
+            return Response(project_data, status=status.HTTP_200_OK)
+        else:
+            return Response({'detail': 'Project not found.'}, status=status.HTTP_404_NOT_FOUND)
     
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

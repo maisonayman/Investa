@@ -11,7 +11,6 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework.permissions import AllowAny
 
 
-
 @api_view(['POST'])
 def interests(request):
     try:
@@ -31,6 +30,125 @@ def interests(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
     
+
+@api_view(['GET'])
+def get_user_profile(request, user_id):
+    """Get user's name and profile picture from Firebase."""
+    try:
+        # Get user data from Firebase Realtime Database
+        users_ref = db.reference("users")
+        user_data = users_ref.child(user_id).get()
+        
+        if not user_data:
+            return JsonResponse({"error": "User not found"}, status=404)
+        
+        # Get user's profile picture URL from Firebase
+        profile_pic_url = user_data.get('profile_picture', '')  # Changed from profile_picture_url to profile_picture
+        
+        response_data = {
+            "username": user_data.get('username', ''),
+            "profile_picture": profile_pic_url
+        }
+        
+        return JsonResponse(response_data, status=200)
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)    
+
+@api_view(['GET'])
+def get_user_interest_projects(request, user_id):
+    # Get user's interests
+    user_ref = db.reference(f'users/{user_id}')
+    user_data = user_ref.get()
+    interests = user_data.get('interests', [])
+
+    # Get all projects
+    projects_ref = db.reference('projects')
+    all_projects = projects_ref.get()
+
+    # Filter matching projects
+    matching_projects = [
+        project for project in all_projects.values()
+        if project.get('category') in interests
+    ]
+
+    return JsonResponse(matching_projects, safe=False)
+
+
+@api_view(['POST'])
+def save_project(request):
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body.decode('utf-8'))
+
+            user_id = body.get('user_id')
+            project_id = body.get('project_id')
+
+            if not (user_id and project_id):
+                return JsonResponse({'error': 'Missing fields'}, status=400)
+
+            # حفظ الربط في Firebase Realtime Database
+            ref = db.reference(f'saved_projects/{user_id}')
+            saved_data = {
+                'project_id': project_id,
+                'saved_at': datetime.now().isoformat()
+            }
+            new_ref = ref.push(saved_data)
+
+            return JsonResponse({'message': 'Project saved successfully', 'saved_id': new_ref.key}, status=201)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@csrf_exempt
+def get_saved_projects(request, user_id):
+    
+    if request.method == 'GET':
+        try:
+            limit = int(request.GET.get('limit', 10))
+            offset = int(request.GET.get('offset', 0))
+
+            ref = db.reference(f'saved_projects/{user_id}')
+            projects = ref.get()
+
+            if projects:
+                project_list = []
+                for key, value in projects.items():
+                    value['id'] = key
+                    project_list.append(value)
+
+                project_list.sort(key=lambda x: x['saved_at'], reverse=True)
+                paginated = project_list[offset:offset+limit]
+
+                return JsonResponse(paginated, safe=False, status=200)
+            else:
+                return JsonResponse({'message': 'No saved projects found'}, status=404)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@csrf_exempt
+def delete_saved_project(request, user_id, saved_id):
+   
+    if request.method == 'DELETE':
+        try:
+            ref = db.reference(f'saved_projects/{user_id}/{saved_id}')
+            if ref.get():
+                ref.delete()
+                return JsonResponse({'message': 'Saved project deleted successfully'}, status=200)
+            else:
+                return JsonResponse({'error': 'Saved project not found'}, status=404)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['POST'])
@@ -118,8 +236,6 @@ def initiate_payment(request):
         return Response({"error": str(e)}, status=500)
 
 
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def paymob_callback(request):
@@ -150,50 +266,6 @@ def paymob_callback(request):
         return Response({"error": str(e)}, status=500)
 
 
-
-@api_view(['GET'])
-def get_user_interest_projects(request, user_id):
-    # Get user's interests
-    user_ref = db.reference(f'users/{user_id}')
-    user_data = user_ref.get()
-    interests = user_data.get('interests', [])
-
-    # Get all projects
-    projects_ref = db.reference('projects')
-    all_projects = projects_ref.get()
-
-    # Filter matching projects
-    matching_projects = [
-        project for project in all_projects.values()
-        if project.get('category') in interests
-    ]
-
-    return JsonResponse(matching_projects, safe=False)
-
-# get other projects
-'''
-@api_view(['GET'])
-def get_other_projects(request, user_id):
-    # Get user's interests
-    user_ref = db.reference(f'users/{user_id}')
-    user_data = user_ref.get()
-    interests = user_data.get('interests', [])
-
-    # Get all projects
-    projects_ref = db.reference('projects')
-    all_projects = projects_ref.get()
-
-    # Filter non-matching projects
-    other_projects = [
-        project for project in all_projects.values()
-        if project.get('category') not in interests
-    ]
-
-    return JsonResponse(other_projects, safe=False)
-
-'''
-
-
 @api_view(['GET'])
 def get_category_percentages(request):
     # Get Firebase reference to the 'projects' table
@@ -216,82 +288,6 @@ def get_category_percentages(request):
     
     # Return the calculated percentages as JSON response
     return JsonResponse(percentages)
-
-
-@api_view(['POST'])
-def save_project(request):
-    if request.method == 'POST':
-        try:
-            body = json.loads(request.body.decode('utf-8'))
-
-            user_id = body.get('user_id')
-            project_id = body.get('project_id')
-
-            if not (user_id and project_id):
-                return JsonResponse({'error': 'Missing fields'}, status=400)
-
-            # حفظ الربط في Firebase Realtime Database
-            ref = db.reference(f'saved_projects/{user_id}')
-            saved_data = {
-                'project_id': project_id,
-                'saved_at': datetime.now().isoformat()
-            }
-            new_ref = ref.push(saved_data)
-
-            return JsonResponse({'message': 'Project saved successfully', 'saved_id': new_ref.key}, status=201)
-
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
-
-
-@csrf_exempt
-def get_saved_projects(request, user_id):
-    
-    if request.method == 'GET':
-        try:
-            limit = int(request.GET.get('limit', 10))
-            offset = int(request.GET.get('offset', 0))
-
-            ref = db.reference(f'saved_projects/{user_id}')
-            projects = ref.get()
-
-            if projects:
-                project_list = []
-                for key, value in projects.items():
-                    value['id'] = key
-                    project_list.append(value)
-
-                project_list.sort(key=lambda x: x['saved_at'], reverse=True)
-                paginated = project_list[offset:offset+limit]
-
-                return JsonResponse(paginated, safe=False, status=200)
-            else:
-                return JsonResponse({'message': 'No saved projects found'}, status=404)
-
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
-
-
-@csrf_exempt
-def delete_saved_project(request, user_id, saved_id):
-   
-    if request.method == 'DELETE':
-        try:
-            ref = db.reference(f'saved_projects/{user_id}/{saved_id}')
-            if ref.get():
-                ref.delete()
-                return JsonResponse({'message': 'Saved project deleted successfully'}, status=200)
-            else:
-                return JsonResponse({'error': 'Saved project not found'}, status=404)
-
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -352,7 +348,6 @@ def businesses_invested_in(request):
                 })
 
     return JsonResponse({'businesses': businesses})
-
 
 
 @api_view(['GET'])
