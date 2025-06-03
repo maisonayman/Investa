@@ -64,7 +64,15 @@ from investor.views import (
     search_projects
 )
 
-from web.views import monthly_finance_firebase_view, add_monthly_finance
+from web.views import (
+    monthly_finance_firebase_view, 
+    add_monthly_finance,
+    get_dashboard_summary,
+    get_investment_growth,
+    get_my_investments,
+    get_investment_distribution
+)
+
 
 # Swagger schema setup
 schema_view = get_schema_view(
@@ -124,6 +132,10 @@ urlpatterns = [
     # Web endpoints
     path('monthly-finance/', monthly_finance_firebase_view, name='monthly-finance'),
     path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
+    path('dashboard/<str:user_id>/', get_dashboard_summary, name='get_dashboard_summary'),
+    path('dashboard/<str:user_id>/growth/', get_investment_growth, name='get_investment_growth'),
+    path('dashboard/<str:user_id>/investments/',get_my_investments, name='get_my_investments'),
+    path('dashboard/<str:user_id>/distribution/', get_investment_distribution, name='get_investment_distribution'),
 
     # Swagger documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
