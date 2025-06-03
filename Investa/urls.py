@@ -43,7 +43,10 @@ from user.views import (
 # Founder app views
 from founder.views import (
     insert_project,
-    insert_business_details
+    insert_business_details,
+    create_project,
+    create_analysis,
+    create_media_and_attachments,
     )
 
 # Investor app views
@@ -130,7 +133,9 @@ urlpatterns = [
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 
-
+    path('api/create-project/', create_project, name='create_project'),
+    path('api/create-analysis/', create_analysis, name='create_analysis'),
+    path('api/create-media/', create_media_and_attachments, name='create_media'),
 
 ]
 
