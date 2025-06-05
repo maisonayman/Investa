@@ -44,7 +44,9 @@ from user.views import (
 from founder.views import (
     insert_project,
     insert_business_details,
-    create_project
+    create_project,
+    transactions_api,
+    add_product,
     )
 
 # Investor app views
@@ -111,6 +113,9 @@ urlpatterns = [
     path('insert-project/', insert_project, name='insert_project'),
     path('insert_business_details/', insert_business_details, name='insert_business_details'),
     path('create-project/', create_project, name='create_project'),
+    path('api/transactions/', transactions_api),
+    path('api/add-product/', add_product),
+
 
     # Investor endpoints
     path('interests/', interests, name='interests'),

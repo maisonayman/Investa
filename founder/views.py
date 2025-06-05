@@ -257,3 +257,93 @@ def get_project_by_id(request, project_id):
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+def transactions_api(request):
+    ref = db.reference('transactions')
+
+    # ✅ عرض كل المعاملات
+    if request.method == "GET":
+        data = ref.get()
+        total_income = 0
+        total_expenses = 0
+        transactions = []
+
+        if data:
+            for key, tx in data.items():
+                tx["id"] = key
+                amount = float(tx["amount"])
+                if tx["type"] == "Income":
+                    total_income += amount
+                elif tx["type"] == "Expense":
+                    total_expenses += amount
+                transactions.append(tx)
+
+        net_profit = total_income - total_expenses
+        profit_percent = round((net_profit / total_income) * 100, 1) if total_income else 0
+
+        return Response({
+            "total_income": total_income,
+            "total_expenses": total_expenses,
+            "net_profit": net_profit,
+            "profit_percent": profit_percent,
+            "transactions": transactions
+        }, status=status.HTTP_200_OK)
+
+    # ✅ تعديل معاملة
+    elif request.method == "PUT":
+        try:
+            data = request.data
+            tx_id = data.get("id")
+            if not tx_id:
+                return Response({"error": "يجب إرسال id"}, status=status.HTTP_400_BAD_REQUEST)
+
+            tx_ref = ref.child(tx_id)
+            tx_ref.update({
+                "date": data["date"],
+                "type": data["type"],
+                "description": data["description"],
+                "amount": data["amount"],
+                "payment_method": data["payment_method"],
+                "responsible": data["responsible"]
+            })
+
+            return Response({"message": "تم التعديل بنجاح"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    # ✅ حذف معاملة
+    elif request.method == "DELETE":
+        try:
+            data = request.data
+            tx_id = data.get("id")
+            if not tx_id:
+                return Response({"error": "يجب إرسال id"}, status=status.HTTP_400_BAD_REQUEST)
+
+            tx_ref = ref.child(tx_id)
+            tx_ref.delete()
+
+            return Response({"message": "تم الحذف بنجاح"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+        
+@api_view(['POST'])
+def add_product(request):
+    try:
+        data = request.data
+        ref = db.reference('products')
+        ref.push({
+            "product_name": data.get("product_name"),
+            "price": data.get("price"),
+            "roi": data.get("roi"),
+            "available_qty": data.get("available_qty"),
+            "sold_qty": data.get("sold_qty")
+        })
+        return Response({"status": "success", "message": "Product added successfully"})
+    except Exception as e:
+        return Response({"status": "error", "message": str(e)}, status=500)
