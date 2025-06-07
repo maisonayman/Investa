@@ -47,31 +47,6 @@ def add_monthly_finance(request):
     return Response({"message": f"{month} data saved successfully"}, status=status.HTTP_201_CREATED)
 
 
-# 1. Get Dashboard Summary (top cards)
-@api_view(['GET'])
-def get_dashboard_summary(request, user_id):
-    investments_ref = db.reference(f'users/{user_id}/investments')
-    data = investments_ref.get() or {}
-
-    total_investment = 0
-    total_profit = 0
-    investment_types = set()
-    businesses = []
-
-    for business_id, inv in data.items():
-        total_investment += inv.get('amount', 0)
-        total_profit += inv.get('net_profit', 0)
-        investment_types.add(inv.get('type', ''))
-        businesses.append(inv.get('business_name', ''))
-
-    return Response({
-        "total_investment": total_investment,
-        "net_profit": total_profit,
-        "investment_types": list(investment_types),
-        "businesses_invested_in": businesses
-    })
-
-
 # 2. Get Investment Growth (line chart)
 @api_view(['GET'])
 def get_investment_growth(request, user_id):

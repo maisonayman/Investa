@@ -4,12 +4,14 @@ from rest_framework.decorators import api_view, parser_classes
 import uuid
 from rest_framework.parsers import MultiPartParser, FormParser
 from Investa.utils import upload_image_to_drive, upload_video_to_drive, upload_file_to_drive
-import os
 from rest_framework import status
 from django.conf import settings
-from django.http import JsonResponse
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
+from rest_framework.views import APIView
+from collections import defaultdict
+from datetime import datetime
+
 
 
 @api_view(['POST'])
@@ -105,6 +107,8 @@ def insert_business_details(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def create_project(request):
@@ -122,20 +126,19 @@ def create_project(request):
                 folder_id=settings.FOLDER_ID_FOR_PROJECT_PIC
             )
 
-        # --- Upload media files
-        def upload_optional_file(field_name, filename_suffix):
+        # --- Upload media files using updated upload_file_to_drive()
+        def upload_optional_doc(field_name, filename_suffix):
             file = files.get(field_name)
             if file:
-                return upload_image_to_drive(
+                return upload_file_to_drive(
                     file,
-                    f"{project_id}_{filename_suffix}",
-                    folder_id=settings.FOLDER_ID_FOR_PROJECT_PIC
+                    f"{project_id}_{filename_suffix}"
                 )
             return ""
 
-        commercial_reg_url = upload_optional_file("commercialRegFile", "commercial_reg.pdf")
-        financial_summary_url = upload_optional_file("financialSummaryFile", "financial_summary.pdf")
-        business_plan_url = upload_optional_file("simplifiedBusinessPlanFile", "business_plan.pdf")
+        commercial_reg_url = upload_optional_doc("commercialRegFile", "commercial_reg.pdf")
+        financial_summary_url = upload_optional_doc("financialSummaryFile", "financial_summary.pdf")
+        business_plan_url = upload_optional_doc("simplifiedBusinessPlanFile", "business_plan.pdf")
 
         # --- Project Info
         project_info = {
@@ -146,6 +149,22 @@ def create_project(request):
             "projectStartDate": data.get("projectStartDate"),
             "geographicalLocation": data.get("geographicalLocation"),
             "teamSize": data.get("teamSize"),
+            "annualRevenue": data.get("annual"),
+            "monthlyGrowthRate": data.get("monthlygrowthrate"),
+            "netProfit": data.get("netprofit"),
+            "currentCustomers": data.get("numcustomers"),
+            "repeatPurchaseRate": data.get("purchaserate"),
+            "numberOfBranches": data.get("branchesnum"),
+            "customerGrowthRate": data.get("growthrate"),
+            "churnRate": data.get("churnrate"),
+            "monthlyOperatingCosts": data.get("monthlyoperatingcosts"),
+            "debtToEquityRatio": data.get("depttoequity"),
+            "fundingNeeded": data.get("fundingneeded"),
+            "ownershipPercentage": data.get("ownershipPercentage"),
+            "investmentType": data.get("investmentType"),
+            "totalInvestorsAllowed": data.get("totalInvestorsAllowed"),
+            "maxInvestorShort": data.get("maxInvestorShort"),
+            "maxInvestorLong": data.get("maxInvestorLong"),
             "projectLogoUrl": project_logo_url,
         }
 
@@ -181,7 +200,7 @@ def create_project(request):
         db.reference(f'media_and_attachments/{project_id}').set(media_info)
 
         return Response({
-            "message": "تم حفظ المشروع بنجاح في 3 جداول باستخدام نفس المعرف",
+            "message": "success",
             "projectId": project_id
         })
 
@@ -216,35 +235,114 @@ def send_phase3_email(request):
         return Response({"error": "Failed to send email", "details": str(e)}, status=500)
 
 
-
 @api_view(['GET'])
 def founder_home(request, project_id):
-    """Get project's name and project picture from Firebase."""
     try:
-        # Get user data from Firebase Realtime Database
-        projects_ref = db.reference("projects")
-        project_data = projects_ref.child(project_id).get()
-        
-        if not project_data:
-            return JsonResponse({"error": "project not found"}, status=404)
-        
-        # Get user's profile picture URL from Firebase
-        project_pic_url = project_data.get('project_picture', '')  # Changed from profile_picture_url to profile_picture
-        
-        response_data = {
-            "project_name": project_data.get('project_name', ''),
-            "project_picture": project_pic_url
-        }
-        
-        return JsonResponse(response_data, status=200)
-        
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        # Fetch data from Firebase
+        project_data = db.reference(f'projects/{project_id}').get() or {}
+        analysis_data = db.reference(f'analysis/{project_id}').get() or {}
+        media_data = db.reference(f'media_and_attachments/{project_id}').get() or {}
 
+        if not project_data:
+            return Response({'detail': 'Project not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Compose the response matching your Flutter expected format:
+        response_data = {
+            "user_data": {
+                "name": project_data.get("projectName", ""),
+                "profile_picture_url": project_data.get("projectLogoUrl", "")
+            },
+            "overview_data": {
+                "project_status": project_data.get("projectStatus", "قيد التقدم"),  # Example, you may add this to project_info when saving
+                "progress_percentage": project_data.get("progressPercentage", "80%"),
+                "num_investors": project_data.get("numInvestors", 0),
+                "total_funding": project_data.get("totalFunding", "0 L.E"),
+                "overall_project_rating": project_data.get("overallProjectRating", "0")
+            },
+
+            "additional_info": {
+                "funding_goal": analysis_data.get("fundingGoal", ""),
+                "completed_funding": analysis_data.get("completedFunding", ""),
+                "expected_success_rate": analysis_data.get("expectedSuccessRate", ""),
+                "investment_state": analysis_data.get("investmentState", ""),
+                "total_investors_allowed": analysis_data.get("totalInvestorsAllowed", 0),
+                "max_short_term": analysis_data.get("maxInvestorShort", 0),
+                "max_long_term": analysis_data.get("maxInvestorLong", 0),
+                "minimum_investment": analysis_data.get("minimumInvestment", ""),
+                "maximum_investment": analysis_data.get("maximumInvestment", ""),
+                "minimum_short_term": analysis_data.get("minimumShortTerm", ""),
+                "minimum_long_term": analysis_data.get("minimumLongTerm", ""),
+                "deadline": analysis_data.get("deadline", ""),
+                "store_type": analysis_data.get("storeType", ""),
+                "location": project_data.get("geographicalLocation", ""),
+                "website": media_data.get("projectWebsiteLinks", ""),
+                "social_media": media_data.get("socialMedia", {
+                    "twitter": "",
+                    "facebook": "",
+                    "instagram": "",
+                    "linkedin": ""
+                }),
+            }
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
-def get_project_by_id(request, project_id):
+def founder_investment_graph(request, founder_id):
+    # Step 1: Get all projects for this founder
+    projects_ref = db.reference('projects')
+    projects_data = projects_ref.get() or {}
+
+    founder_project_ids = [
+        pid for pid, pdata in projects_data.items()
+        if pdata.get('founder_id') == founder_id
+    ]
+
+    # Step 2: Get all investments
+    invested_ref = db.reference('invested_projects')
+    investments = invested_ref.get() or {}
+
+    # Step 3: Prepare monthly data
+    monthly_data = defaultdict(lambda: {"total_invested": 0, "total_profit": 0})
+
+    for key, inv in investments.items():
+        if inv.get('project_id') in founder_project_ids:
+            timestamp = inv.get('timestamp')
+            if not timestamp:
+                continue  # skip if no timestamp
+            try:
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                month_key = dt.strftime("%Y-%m")  # e.g., "2025-03"
+            except:
+                continue
+
+            invested_amount = float(inv.get('amount_invested', 0))
+            profit = float(inv.get('profit', 0))
+
+            monthly_data[month_key]["total_invested"] += invested_amount
+            monthly_data[month_key]["total_profit"] += profit
+
+    # Step 4: Format response with ROI
+    graph_data = []
+    for month in sorted(monthly_data.keys()):
+        total = monthly_data[month]["total_invested"]
+        profit = monthly_data[month]["total_profit"]
+        roi = (profit / total) if total > 0 else 0
+        graph_data.append({
+            "month": month,
+            "investment_return": round(roi, 2),         # e.g. 0.25 for 25%
+            "total_invested": round(total, 2)
+        })
+
+    return Response(graph_data)
+
+
+@api_view(['GET'])
+def get_project(request, project_id):
     try:
         # Get project data from Firebase Realtime Database
         project_ref = db.reference(f'projects/{project_id}')
@@ -259,12 +357,9 @@ def get_project_by_id(request, project_id):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['GET', 'PUT', 'DELETE'])
-def transactions_api(request):
-    ref = db.reference('transactions')
-
-    # ✅ عرض كل المعاملات
-    if request.method == "GET":
+class TransactionsAPI(APIView):
+    def get(self, request):
+        ref = db.reference('transactions')
         data = ref.get()
         total_income = 0
         total_expenses = 0
@@ -291,9 +386,9 @@ def transactions_api(request):
             "transactions": transactions
         }, status=status.HTTP_200_OK)
 
-    # ✅ تعديل معاملة
-    elif request.method == "PUT":
+    def put(self, request):
         try:
+            ref = db.reference('transactions')
             data = request.data
             tx_id = data.get("id")
             if not tx_id:
@@ -314,9 +409,9 @@ def transactions_api(request):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ حذف معاملة
-    elif request.method == "DELETE":
+    def delete(self, request):
         try:
+            ref = db.reference('transactions')
             data = request.data
             tx_id = data.get("id")
             if not tx_id:
@@ -329,9 +424,8 @@ def transactions_api(request):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-
-        
+  
+ 
 @api_view(['POST'])
 def add_product(request):
     try:
@@ -347,3 +441,4 @@ def add_product(request):
         return Response({"status": "success", "message": "Product added successfully"})
     except Exception as e:
         return Response({"status": "error", "message": str(e)}, status=500)
+

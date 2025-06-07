@@ -177,12 +177,12 @@ class PersonalDataList(APIView):
     def post(self, request):
         try:
             body = request.data
+            user_id = body.get('user_id')
 
-            # ❌ user_id is NOT required anymore
-            # user_id = body.get('user_id')
+            if not user_id:
+                return Response({'error': 'user_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # ✅ Store data under a random push key in "users"
-            ref = db.reference("users").push()
+            ref = db.reference("users").child(user_id)
 
             ref.set({
                 'full_name': body.get('full_name', '').strip(),
@@ -203,36 +203,104 @@ class PersonalDataList(APIView):
 
 class PersonalDataDetail(APIView):
     def get(self, request, user_id):
-        ref = db.reference("personal_data").child(user_id)
-        data = ref.get()
-        if not data:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(data, status=status.HTTP_200_OK)
+        try:
+            ref = db.reference(f"users/{user_id}")
+            data = ref.get()
+
+            if not data:
+                return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            return Response(data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def put(self, request, user_id):
-        ref = db.reference("personal_data").child(user_id)
-        old_data = ref.get()
-        if not old_data:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            ref = db.reference(f"users/{user_id}")
+            existing_data = ref.get()
 
-        body = request.data
-        updated_data = {
-            'full_name': body.get('full_name', old_data.get('full_name', '')),
-            'phone_number': body.get('phone_number', old_data.get('phone_number', '')),
-            'birthdate': body.get('birthdate', old_data.get('birthdate', '2000-01-01')),
-            'country': body.get('country', old_data.get('country', '')),
-            'postal_code': body.get('postal_code', old_data.get('postal_code', '')),
-            'address_1': body.get('address_1', old_data.get('address_1', '')),
-            'address_2': body.get('address_2', old_data.get('address_2', '')),
-        }
+            if not existing_data:
+                return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        ref.update(updated_data)
-        return Response({'message': 'Record updated successfully'}, status=status.HTTP_200_OK)
+            body = request.data
+
+            ref.update({
+                'full_name': body.get('full_name', existing_data.get('full_name', '')).strip(),
+                'national_id': body.get('national_number', existing_data.get('national_id', '')).strip(),
+                'phone_number': body.get('phone_number', existing_data.get('phone_number', '')).strip(),
+                'birthdate': body.get('birthdate', existing_data.get('birthdate', '2000-01-01')).strip(),
+                'country': body.get('country', existing_data.get('country', '')).strip(),
+                'postal_code': body.get('postal_code', existing_data.get('postal_code', '')).strip(),
+                'address_1': body.get('address_1', existing_data.get('address_1', '')).strip(),
+                'address_2': body.get('address_2', existing_data.get('address_2', '')).strip(),
+            })
+
+            return Response({'message': 'Personal data updated.'}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, user_id):
-        ref = db.reference("personal_data").child(user_id)
-        ref.delete()
-        return Response({'message': 'Record deleted successfully'}, status=status.HTTP_200_OK)
+        try:
+            ref = db.reference(f"users/{user_id}")
+            if ref.get():
+                ref.delete()
+                return Response({'message': 'User data deleted.'}, status=status.HTTP_200_OK)
+            else:
+                return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def profile_details(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        user_id = data.get('user_id')
+
+        if not user_id:
+            return JsonResponse({'error': 'user_id is required.'}, status=400)
+
+        update_data = {
+            "gender": data.get('gender'),
+            "employmentStatus": data.get('employment_status'),
+            "primarySourceOfFund": data.get('primary_source_of_fund'),
+            "monthlyIncome": data.get('monthly_income'),
+            "monthlySave": data.get('monthly_save'),
+            "submitted_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        update_data = {k: v for k, v in update_data.items() if v is not None}
+
+        db.reference('users').child(user_id).child('profile_details').set(update_data)
+        return JsonResponse({"message": "Profile details saved successfully."}, status=200)
+
+    except Exception as e:
+        return JsonResponse({"error": "Failed to save profile details.", "details": str(e)}, status=500)
+
+
+@api_view(['POST'])
+def investment_details(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        user_id = data.get('user_id')
+
+        if not user_id:
+            return Response({'error': 'user_id is required.'}, status=400)
+
+        investment_data = {
+            "investment_type": data.get('investment_term'),
+            "purpose_investment": data.get('description'),
+            "submitted_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        investment_data = {k: v for k, v in investment_data.items() if v is not None}
+
+        db.reference('users').child(user_id).child('investment_details').set(investment_data)
+        return Response({"message": "Investment details saved."}, status=200)
+
+    except Exception as e:
+        return Response({"error": "Failed to submit investment data.", "details": str(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -240,18 +308,13 @@ def upload_national_card(request):
     try:
         front_national_card = request.FILES.get('id_front_image')
         back_national_card = request.FILES.get('id_back_image')
+        user_id = request.data.get('user_id')
 
-        # ❌ user_id is not required anymore
-        # user_id = request.data.get('user_id')
-
-        if not front_national_card or not back_national_card:
-            return JsonResponse({'error': 'Front and back images are required.'}, status=400)
+        if not front_national_card or not back_national_card or not user_id:
+            return JsonResponse({'error': 'user_id, front, and back images are required.'}, status=400)
 
         main_folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"
-
-        import uuid
-        anonymous_folder_name = str(uuid.uuid4())  # Create random folder for unknown users
-        user_folder_id = get_or_create_drive_folder(anonymous_folder_name, parent_folder_id=main_folder_id)
+        user_folder_id = get_or_create_drive_folder(user_id, parent_folder_id=main_folder_id)
 
         front_file_name = front_national_card.name
         front_image_url = upload_image_to_drive(front_national_card, front_file_name, user_folder_id)
@@ -259,8 +322,8 @@ def upload_national_card(request):
         back_file_name = back_national_card.name
         back_image_url = upload_image_to_drive(back_national_card, back_file_name, user_folder_id)
 
-        ref = db.reference("national_cards")
-        ref.push().set({
+        ref = db.reference("users").child(user_id).child("national_card")
+        ref.set({
             "front_url": front_image_url,
             "back_url": back_image_url,
         })
@@ -279,28 +342,43 @@ def upload_national_card(request):
 def life_picture(request):
     try:
         uploaded_file = request.FILES.get('image')
+        user_id = request.data.get('user_id')
 
-        # ❌ No user_id required
-        # user_id = request.POST.get('user_id')
+        if not uploaded_file or not user_id:
+            return JsonResponse({'error': 'user_id and image are required.'}, status=400)
 
-        if not uploaded_file:
-            return JsonResponse({'error': 'No image provided.'}, status=400)
-
-        import uuid
         file_name = f"{uuid.uuid4()}_{uploaded_file.name}"
         folder_id = "1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd"
-
         image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
 
-        # ✅ Save the image somewhere general, not under users/<id>
-        ref = db.reference("life_pictures")
-        ref.push().set({"profile_picture": image_url})
+        ref = db.reference("users").child(user_id).child("life_picture")
+        ref.set({"profile_picture": image_url})
 
         return JsonResponse({'message': 'Life picture uploaded.', 'url': image_url})
 
     except Exception as e:
-        print("Error uploading life picture:", str(e))
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+def set_user_role(request):
+    user_id = request.data.get('user_id')
+    role = request.data.get('role')  # 'investor' or 'founder'
+
+    if not user_id or not role:
+        return Response({'error': 'user_id and role are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if role not in ['investor', 'founder']:
+        return Response({'error': 'Invalid role. Must be investor or founder.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user_ref = db.reference(f'users/{user_id}')
+        user_ref.update({'role': role})
+
+        return Response({'message': f'Role "{role}" set for user {user_id}.'}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -334,11 +412,11 @@ def reset_password_with_code(request):
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def upload_video(request):
-    national_id = request.data.get('national_id')
+    user_id = request.data.get('user_id')
     video = request.FILES.get('video')
 
-    if not national_id or not video:
-        return Response({'error': 'national_id and video are required.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not user_id or not video:
+        return Response({'error': 'user_id and video are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
     filename = f"{uuid.uuid4()}.mp4"
     with open(filename, 'wb+') as f:
@@ -346,10 +424,15 @@ def upload_video(request):
             f.write(chunk)
 
     try:
-        drive_filename = f"{national_id}_reel.mp4"
-        video_url = upload_video_to_drive(filename, drive_filename)  # only 2 args now
+        drive_filename = f"{uuid.uuid4()}_{user_id}_reel.mp4"  # Unique filename per upload
+        folder_id = settings.FOLDER_ID_FOR_REELS
+        video_url = upload_video_to_drive(filename, drive_filename, folder_id)
 
-        db.reference(f'reels/{national_id}').set({'video_url': video_url})
+        # Use push to add a new reel entry instead of replacing existing
+        db.reference(f'reels/{user_id}').push({
+            'video_url': video_url,
+            'timestamp': datetime.now().isoformat()
+        })
 
         return Response({'message': 'Video uploaded', 'video_url': video_url}, status=status.HTTP_200_OK)
 
@@ -383,53 +466,5 @@ def get_reels(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500) 
-
-
-@api_view(['POST'])
-def user_profile_details_update(request):
-    try:
-        data = json.loads(request.body.decode('utf-8'))
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON in request body'}, status=400)
-
-    update_data = {
-        "gender": data.get('gender'),
-        "employmentStatus": data.get('employment_status'),
-        "primarySourceOfFund": data.get('primary_source_of_fund'),
-        "monthlyIncome": data.get('monthly_income'),
-        "monthlySave": data.get('monthly_save'),
-        "submitted_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-
-    update_data = {k: v for k, v in update_data.items() if v is not None}
-
-    try:
-        db.reference('anonymous_profiles').push(update_data)
-        return JsonResponse({"message": "Anonymous profile details saved successfully."}, status=200)
-    except Exception as e:
-        print(f"Error saving profile details: {e}")
-        return JsonResponse({"error": "Failed to save profile details.", "details": str(e)}, status=500)
-
-@api_view(['POST'])
-def user_investment_details_submit(request):
-    try:
-        data = json.loads(request.body.decode('utf-8'))
-    except json.JSONDecodeError:
-        return Response({'error': 'Invalid JSON in request body'}, status=400)
-
-    investment_data = {
-        "investment_type": data.get('investment_term'),
-        "purpose_investment": data.get('description'),
-        "submitted_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-
-    investment_data = {k: v for k, v in investment_data.items() if v is not None}
-
-    try:
-        db.reference('anonymous_investments').push(investment_data)
-        return Response({"message": "Investment details saved anonymously."}, status=200)
-    except Exception as e:
-        print(f"Error saving investment details: {e}")
-        return Response({"error": "Failed to submit investment data.", "details": str(e)}, status=500)
 
 

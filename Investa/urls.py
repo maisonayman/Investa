@@ -36,17 +36,19 @@ from user.views import (
     send_reset_link,
     reset_password_with_code,
     life_picture, 
-    user_profile_details_update,
-    user_investment_details_submit
+    profile_details,
+    investment_details
 )
 
 # Founder app views
 from founder.views import (
     insert_project,
     insert_business_details,
-    create_project,
     transactions_api,
     add_product,
+    create_project, 
+    send_phase3_email,
+    founder_home
     )
 
 # Investor app views
@@ -58,19 +60,23 @@ from investor.views import (
     save_project,
     get_saved_projects,
     delete_saved_project,
-    total_investment,
-    total_current_net_profit,
-    investment_types,
-    businesses_invested_in,
+    get_dashboard_summary,
     initiate_payment,
     paymob_callback,
-    search_projects
+    search_projects,
+    add_invested_project,
+    get_user_invested_projects,
+    roi_vs_saving,
+    balance_history,
+    get_user_profile,
+    closing_soon_projects,
+    top_raised_projects,
+    trending_this_month
 )
 
 from web.views import (
     monthly_finance_firebase_view, 
     add_monthly_finance,
-    get_dashboard_summary,
     get_investment_growth,
     get_my_investments,
     get_investment_distribution
@@ -105,39 +111,43 @@ urlpatterns = [
     path('reset-password/', reset_password_with_code, name='reset-password'),
     path('life-picture/', life_picture, name='life_picture'),
     path('upload-national-card/', upload_national_card, name='upload-national-card'),
-    path('account-verificiation/',  user_profile_details_update, name='account_verificiation'), 
-    path('account-verificiation-2/',  user_investment_details_submit, name='account_verificiation'), 
+    path('account-verificiation/',  profile_details, name='account_verificiation'), 
+    path('account-verificiation-2/',  investment_details, name='account_verificiation'), 
 
 
     # Founder endpoints
     path('insert-project/', insert_project, name='insert_project'),
-    path('insert_business_details/', insert_business_details, name='insert_business_details'),
+    path('insert-business-details/', insert_business_details, name='insert_business_details'),
     path('create-project/', create_project, name='create_project'),
-    path('api/transactions/', transactions_api),
-    path('api/add-product/', add_product),
-
+    path('transactions/', transactions_api, name="transactions_api"),
+    path('add-product/', add_product, name="add_product"),
+    path('email/', send_phase3_email, name='email'),
+    path('founder-home/<str:project_id>', founder_home, name='founder_home'), 
 
     # Investor endpoints
     path('interests/', interests, name='interests'),
     #path('get_other_projects/', get_other_projects, name='get_other_projects'),
+    path('welcome/', get_user_profile, name='welcome'),
     path('interest-projects/', get_user_interest_projects, name='get_user_interest_projects'),
+    path('closing-soon/', closing_soon_projects, name='closing_soon_projects'),
+    path('top-raised/', top_raised_projects, name='top_raised_projects'),
+    path('trending/', trending_this_month, name='trending_this_month'),
     path('save-project/', save_project, name='save_project'),
     path('get-saved-projects/<str:user_id>/', get_saved_projects, name='get_saved_projects'),
     path('delete-saved-project/<str:user_id>/<str:saved_id>/', delete_saved_project, name='delete_saved_project'),
-    path('net-profit/', total_current_net_profit, name='total_current_net_profit'),
-    path('investment-types/',investment_types, name='investment_types'),
-    path('businesses-invested/',businesses_invested_in , name='businesses_invested_in' ),
-    path('total-investment/',total_investment , name='total_investment' ),
-    path('get-category-percentages/<str:user_id>/', get_category_percentages, name='get_category_percentages'),
+    path('dashboard/overview/<str:user_id>/', get_dashboard_summary, name='get_dashboard_summary'),
+    path('get-category-percentages/', get_category_percentages, name='get_category_percentages'),
     path('initiate-payment/', initiate_payment, name='initiate_payment'),
     path('paymob-callback/', paymob_callback, name='paymob_callback'),
     path('search/', search_projects, name='search'),
-
+    path('add-invested-project/', add_invested_project, name='add_invested_project'),
+    path('dashboard/invested-projects/<str:user_id>/', get_user_invested_projects, name='add_invested_project'),
+    path('roi_vs_saving/', roi_vs_saving, name="roi_vs_saving"),
+    path('balance_history/', balance_history, name="balance_history"),
 
     # Web endpoints
     path('monthly-finance/', monthly_finance_firebase_view, name='monthly-finance'),
     path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
-    path('dashboard/<str:user_id>/', get_dashboard_summary, name='get_dashboard_summary'),
     path('dashboard/<str:user_id>/growth/', get_investment_growth, name='get_investment_growth'),
     path('dashboard/<str:user_id>/investments/',get_my_investments, name='get_my_investments'),
     path('dashboard/<str:user_id>/distribution/', get_investment_distribution, name='get_investment_distribution'),

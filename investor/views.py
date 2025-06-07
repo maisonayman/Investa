@@ -5,23 +5,26 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from collections import Counter
 from django.conf import settings
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.permissions import AllowAny
+from rest_framework import status
+from collections import defaultdict
+
 
 
 @api_view(['POST'])
 def interests(request):
     try:
         data = json.loads(request.body)
-        user_id = data.get('user_id')
+        #user_id = data.get('user_id')
         interests = data.get('interests', [])
 
-        if not user_id or not isinstance(interests, list):
-            return JsonResponse({'error': 'Invalid data'}, status=400)
+        #if not user_id or not isinstance(interests, list):
+           #return JsonResponse({'error': 'Invalid data'}, status=400)
 
-        ref = db.reference(f'user_interests/{user_id}')
+        ref = db.reference(f'user_interests/')
         ref.set({
             'interests': interests
        })
@@ -29,50 +32,177 @@ def interests(request):
         return JsonResponse({'status': 'success'}, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-    
+
 
 @api_view(['GET'])
-def get_user_profile(request, user_id):
+def get_user_profile(request):
     """Get user's name and profile picture from Firebase."""
     try:
-        # Get user data from Firebase Realtime Database
+        user_id = "3SB8WbQqi9Xeq6ztKbv6ZWPGhM33"  # 🔁 Replace with your testing user ID
+
         users_ref = db.reference("users")
         user_data = users_ref.child(user_id).get()
         
         if not user_data:
             return JsonResponse({"error": "User not found"}, status=404)
         
-        # Get user's profile picture URL from Firebase
-        profile_pic_url = user_data.get('profile_picture', '')  # Changed from profile_picture_url to profile_picture
-        
+        profile_pic_url = user_data.get('profile_picture', '')
+
         response_data = {
             "username": user_data.get('username', ''),
             "profile_picture": profile_pic_url
         }
+
+        print("User Profile Data:", response_data)  # 👀 Print for debug
         
         return JsonResponse(response_data, status=200)
-        
+
     except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)    
+        return JsonResponse({"error": str(e)}, status=400)
+
 
 @api_view(['GET'])
-def get_user_interest_projects(request, user_id):
-    # Get user's interests
-    user_ref = db.reference(f'users/{user_id}')
-    user_data = user_ref.get()
-    interests = user_data.get('interests', [])
+def get_user_interest_projects(request):
+    try:
+        user_id = "3SB8WbQqi9Xeq6ztKbv6ZWPGhM33"  # 🔁 Replace with your testing user ID
 
-    # Get all projects
+        user_ref = db.reference(f'users/{user_id}')
+        user_data = user_ref.get()
+        interests = user_data.get('interests', [])
+
+        print("User Interests:", interests)  # 👀
+
+        projects_ref = db.reference('projects')
+        all_projects = projects_ref.get()
+
+        matching_projects = [
+            project for project in all_projects.values()
+            if project.get('projectCategory') in interests
+        ]
+
+        print(f"Matching projects for user {user_id}:", matching_projects)
+
+        return JsonResponse(matching_projects, safe=False)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+def closing_soon_projects(request):
+    # 1. Fetch all projects
     projects_ref = db.reference('projects')
-    all_projects = projects_ref.get()
+    projects_data = projects_ref.get() or {}
 
-    # Filter matching projects
-    matching_projects = [
-        project for project in all_projects.values()
-        if project.get('category') in interests
-    ]
+    # 2. Fetch all investments
+    investments_ref = db.reference('invested_projects')
+    investments = investments_ref.get() or {}
 
-    return JsonResponse(matching_projects, safe=False)
+    # 3. Count unique investors by type (short_term / long_term)
+    investor_counts = defaultdict(lambda: {"short_term": set(), "long_term": set()})
+
+    for inv_id, inv in investments.items():
+        project_id = inv.get('project_id')
+        user_id = inv.get('user_id')
+        inv_type = inv.get('investment_type')  # should be "short_term" or "long_term"
+
+        if project_id and user_id and inv_type in ['short_term', 'long_term']:
+            investor_counts[project_id][inv_type].add(user_id)
+
+    # 4. Prepare the closing soon list
+    closing_projects = []
+
+    for project_id, project in projects_data.items():
+        max_short = int(project.get('max_short_term_investors', 0))
+        max_long = int(project.get('max_long_term_investors', 0))
+
+        current_short = len(investor_counts[project_id]['short_term'])
+        current_long = len(investor_counts[project_id]['long_term'])
+
+        short_left = max_short - current_short
+        long_left = max_long - current_long
+
+        # If either is close to being full (1 or 2 spots left)
+        if 0 < short_left <= 2 or 0 < long_left <= 2:
+            closing_projects.append({
+                "project_id": project_id,
+                "title": project.get('title'),
+                "short_term": {
+                    "max": max_short,
+                    "current": current_short,
+                    "spots_left": short_left
+                },
+                "long_term": {
+                    "max": max_long,
+                    "current": current_long,
+                    "spots_left": long_left
+                }
+            })
+
+    return Response(closing_projects)
+
+
+@api_view(['GET'])
+def top_raised_projects(request):
+    try:
+        ref = db.reference('projects')
+        projects = ref.get()
+
+        if not projects:
+            return Response({'message': 'No projects found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Convert dict to list of projects with their keys
+        project_list = [
+            {"id": key, **value} for key, value in projects.items()
+            if 'amount_raised' in value
+        ]
+
+        # Sort by amount_raised descending
+        sorted_projects = sorted(project_list, key=lambda x: x.get('amount_raised', 0), reverse=True)
+
+        return Response(sorted_projects[:10], status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def trending_this_month(request):
+    try:
+        ref = db.reference('projects')
+        projects = ref.get()
+
+        if not projects:
+            return Response({'message': 'No projects found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        now = datetime.now()
+        current_month = now.month
+        current_year = now.year
+
+        trending_projects = []
+        for key, proj in projects.items():
+            created_at = proj.get('created_at')
+            if not created_at:
+                continue
+
+            try:
+                created_dt = datetime.fromisoformat(created_at)
+            except ValueError:
+                continue
+
+            if created_dt.month == current_month and created_dt.year == current_year:
+                trending_projects.append({
+                    "id": key,
+                    **proj
+                })
+
+        # Sort by views or clicks if available
+        trending_projects.sort(key=lambda x: x.get('views', 0), reverse=True)
+
+        return Response(trending_projects[:10], status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -246,7 +376,7 @@ def paymob_callback(request):
         success = data.get("success", False)
         order_id = data.get("order", {}).get("id")
 
-        # Update Firebase based on order_id
+        # Reference to payments in Firebase
         ref = db.reference("payments")
         all_payments = ref.get()
 
@@ -254,11 +384,32 @@ def paymob_callback(request):
             for user_id, payments in all_payments.items():
                 for key, payment in payments.items():
                     if payment.get("order_id") == order_id:
+                        # Update payment status
                         ref.child(user_id).child(key).update({
                             "status": "paid" if success else "failed",
                             "transaction_id": transaction_id,
                             "confirmed_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                         })
+
+                        # If payment successful, add to invested_projects
+                        if success:
+                            project_id = payment.get("project_id")
+                            invested_amount = payment.get("amount")  # stored in original currency (EGP)
+                            
+                            # Calculate ROI (example: 10% fixed ROI)
+                            roi_percent = 10
+                            roi = invested_amount * (roi_percent / 100)
+
+                            # Add to invested_projects in Firebase
+                            invested_ref = db.reference("invested_projects")
+                            invested_ref.push({
+                                "user_id": user_id,
+                                "project_id": project_id,
+                                "invested_amount": invested_amount,
+                                "roi": roi,
+                                "invested_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                "status": "active"
+                            })
 
         return Response({"message": "Callback processed"}, status=200)
 
@@ -279,7 +430,7 @@ def get_category_percentages(request):
     
     # Extract categories from the data
     # Since the project doesn't have an 'id', we use the values of the project
-    categories = [project.get('category') for project in projects_data.values() if project.get('category')]
+    categories = [project.get('projectCategory') for project in projects_data.values() if project.get('projectCategory')]
     
     # Calculate the percentage of each category
     total_projects = len(categories)
@@ -291,63 +442,48 @@ def get_category_percentages(request):
 
 
 @api_view(['GET'])
-def total_investment(request):
-    user_id = request.GET.get('user_id')
-    ref = db.reference('investments')
-    data = ref.get()
+def get_dashboard_summary(request, user_id):
+    invested_ref = db.reference('invested_projects')
+    project_ref = db.reference('projects')
+    data = invested_ref.get() or {}
 
-    total = 0
-    if data:
-        for key, record in data.items():
-            if record.get('user_id') == user_id:
-                total += float(record.get('amount_invested', 0))
-
-    return JsonResponse({'total_investment': total})
-
-@api_view(['GET'])
-def total_current_net_profit(request):
-    user_id = request.GET.get('user_id')
-    ref = db.reference('investments')
-    data = ref.get()
-
+    total_investment = 0
     total_profit = 0
-    if data:
-        for key, record in data.items():
-            if record.get('user_id') == user_id:
-                total_profit += float(record.get('current_profit', 0))
+    investment_types = set()
+    project_totals = {}
 
-    return JsonResponse({'total_current_net_profit': total_profit})
+    for key, record in data.items():
+        if record.get('user_id') == user_id:
+            amount = float(record.get('invested_amount', 0))
+            profit = float(record.get('current_profit', 0))
+            investment_type = record.get('investment_type', '')
+            project_id = record.get('project_id', '')
 
-@api_view(['GET'])
-def investment_types(request):
-    user_id = request.GET.get('user_id')
-    ref = db.reference('investments')
-    data = ref.get()
+            if not project_id:
+                continue
 
-    types = set()
-    if data:
-        for key, record in data.items():
-            if record.get('user_id') == user_id:
-                types.add(record.get('investment_type'))
+            if project_id not in project_totals:
+                # Get project name once
+                project_data = project_ref.child(project_id).get()
+                project_name = project_data.get('projectName', '') if project_data else 'Unknown Project'
 
-    return JsonResponse({'investment_types': list(types)})
+                project_totals[project_id] = {
+                    'name': project_name,
+                    'amount': amount
+                }
+            else:
+                project_totals[project_id]['amount'] += amount
 
-@api_view(['GET'])
-def businesses_invested_in(request):
-    user_id= request.GET.get('user_id')
-    ref = db.reference('investments')
-    data = ref.get()
+            total_investment += amount
+            total_profit += profit
+            investment_types.add(investment_type)
 
-    businesses = []
-    if data:
-        for key, record in data.items():
-            if record.get('user_id') == user_id:
-                businesses.append({
-                    'name': record.get('business_name'),
-                    'amount': float(record.get('amount_invested', 0))
-                })
-
-    return JsonResponse({'businesses': businesses})
+    return Response({
+        "total_investment": total_investment,
+        "total_current_net_profit": total_profit,
+        "investment_types": list(investment_types),
+        "businesses_invested_in": list(project_totals.values())
+    })
 
 
 @api_view(['GET'])
@@ -427,3 +563,213 @@ def search_projects(request):
         return JsonResponse({"error": str(e)}, status=400)
 
 
+@api_view(['GET'])
+def get_all_projects(request):
+    """
+    GET /api/projects/
+    Returns a JSON object of all projects stored under the "projects" node in Firebase.
+    """
+    try:
+        projects_ref = db.reference('projects')
+        data = projects_ref.get() or {}
+        # data is a dict of { project_id: { …fields… }, … }
+        return Response(data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {"error": "Failed to fetch projects", "details": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def get_project_by_id(request, project_id):
+    """
+    GET /api/projects/<project_id>/
+    Returns the single project whose Firebase key is project_id.
+    """
+    try:
+        project_ref = db.reference(f'projects/{project_id}')
+        project_data = project_ref.get()
+        if project_data is None:
+            return Response(
+                {"error": f"Project '{project_id}' not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(project_data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {"error": "Failed to fetch project", "details": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def get_user_invested_projects(request, user_id):
+    """
+    Get all invested projects for a given user_id, grouped by project.
+    Sums the ROI and investment amount per project and includes project name and investment type.
+    """
+    try:
+        invested_ref = db.reference('invested_projects')
+        all_investments = invested_ref.get() or {}
+
+        projects_ref = db.reference('projects')
+        all_projects = projects_ref.get() or {}
+
+        grouped_investments = {}
+
+        for inv_id, inv_data in all_investments.items():
+            if inv_data.get('user_id') != user_id:
+                continue
+
+            project_id = inv_data.get('project_id')
+            roi = float(inv_data.get('roi', 0))
+
+            if project_id not in grouped_investments:
+                grouped_investments[project_id] = {
+                    'project_id': project_id,
+                    'project_name': all_projects.get(project_id, {}).get('projectName', 'Unknown Project'),
+                    'total_roi': roi,
+                    'next_roi': roi-100,
+                }
+            else:
+                grouped_investments[project_id]['total_roi'] += roi
+
+        if not grouped_investments:
+            return JsonResponse({"message": "No investments found for this user."}, status=404)
+
+        # Convert dict to list
+        result = list(grouped_investments.values())
+
+        return JsonResponse(result, safe=False, status=200)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(['POST'])
+def add_invested_project(request):
+    """
+    Manually add an investment to the invested_projects node
+    and also under the user's investments node.
+    
+    Expected JSON body:
+    {
+        "user_id": "user123",
+        "project_id": "project456",
+        "invested_amount": 1000,
+        "roi": 100,
+        "investment_type": "short"  # or "long"
+    }
+    """
+    try:
+        data = request.data
+        user_id = data.get("user_id")
+        project_id = data.get("project_id")
+        invested_amount = data.get("invested_amount")
+        roi = data.get("roi")
+        investment_type = data.get("investment_type")
+
+        if not all([user_id, project_id, invested_amount, roi, investment_type]):
+            return JsonResponse({"error": "Missing fields"}, status=400)
+        
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        investment_data = {
+            "user_id": user_id,
+            "project_id": project_id,
+            "invested_amount": invested_amount,
+            "roi": roi,
+            "investment_type": investment_type,
+            "invested_at": timestamp,
+            "status": "active"
+        }
+
+        # Save to invested_projects
+        db.reference("invested_projects").push(investment_data)
+
+        # Save to user's node
+        db.reference(f"users/{user_id}/investments").push({
+            "project_id": project_id,
+            "invested_amount": invested_amount,
+            "roi": roi,
+            "investment_type": investment_type,
+            "invested_at": timestamp,
+            "status": "active"
+        })
+
+        return JsonResponse({"message": "Investment added successfully"}, status=201)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+def roi_vs_saving(request):
+    user_id = request.GET.get('user_id')  # Or get from auth
+
+    # Fetch user's monthly save value from Firebase
+    monthlysave_ref = db.reference(f'anonymous_profiles/{user_id}/monthlysave')
+    monthlysave = monthlysave_ref.get()
+
+    if not monthlysave:
+        return Response({'error': 'Monthly save value not found'}, status=404)
+
+    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug']
+    saving = []
+    investing = []
+
+    current_investment = 0
+    roi_percent = 0.07  # 7% monthly ROI
+
+    for i in range(8):
+        # Saving is cumulative without interest
+        saving.append(monthlysave * (i + 1))
+
+        # Investment adds monthlysave + ROI on total so far
+        current_investment += monthlysave
+        current_investment += current_investment * roi_percent
+        investing.append(round(current_investment, 2))
+
+    return Response({
+        'months': months,
+        'saving': saving,
+        'investing': investing
+    })
+
+
+@api_view(['GET'])
+def balance_history(request):
+    user_id = request.GET.get('user_id')  # Or from token
+
+    ref = db.reference(f'user_investments/{user_id}')
+    investments = ref.get()
+
+    if not investments:
+        return Response({'months': [], 'amounts': []})
+
+    month_totals = defaultdict(float)
+
+    for item in investments.values():
+        amount = float(item.get('amount', 0))
+        timestamp = item.get('timestamp')  # Format: '2025-01-12'
+
+        if timestamp:
+            dt = datetime.datetime.strptime(timestamp, '%Y-%m-%d')
+            month_str = dt.strftime('%b')  # 'Jan', 'Feb', etc.
+            month_totals[month_str] += amount
+
+    # Sort by month order
+    month_order = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan']
+    result_months = []
+    result_amounts = []
+
+    for month in month_order:
+        if month in month_totals:
+            result_months.append(month)
+            result_amounts.append(month_totals[month])
+
+    return Response({
+        'months': result_months,
+        'amounts': result_amounts
+    })

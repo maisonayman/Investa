@@ -7,9 +7,10 @@ from googleapiclient.http import MediaFileUpload
 import io
 from googleapiclient.http import MediaIoBaseUpload
 from firebase_admin import auth
+import uuid
+import os
 
 
-# تحميل credentials من settings
 drive_service = build(
     'drive', 'v3', credentials=settings.GOOGLE_CREDENTIALS
 )
@@ -59,7 +60,6 @@ def send_password_reset_email_custom(email):
 
 def upload_video_to_drive(file_path, file_name, folder_id):
     try:
-        service = build('drive', 'v3', credentials=settings.GOOGLE_CREDENTIALS)
 
         file_metadata = {
             'name': file_name,
@@ -67,9 +67,9 @@ def upload_video_to_drive(file_path, file_name, folder_id):
         }
         media = MediaFileUpload(file_path, mimetype='video/mp4')
 
-        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 
-        service.permissions().create(
+        drive_service.permissions().create(
             fileId=file['id'],
             body={'type': 'anyone', 'role': 'reader'}
         ).execute()
@@ -107,30 +107,40 @@ def upload_image_to_drive(file_obj, file_name, folder_id):
 
 
 
-def upload_file_to_drive(file_path, file_name):
+
+def upload_file_to_drive(uploaded_file, file_name):
     """
-    Uploads a general file (PDF, DOCX, etc.) to Google Drive
-    and returns the public URL.
+    Accepts an uploaded file (Django InMemoryUploadedFile or TemporaryUploadedFile),
+    saves it temporarily, uploads it to Google Drive, and returns the public URL.
     """
     try:
+        # Save the uploaded file temporarily
+        temp_filename = f"/tmp/{uuid.uuid4()}_{file_name}"
+        with open(temp_filename, 'wb+') as f:
+            for chunk in uploaded_file.chunks():
+                f.write(chunk)
+
+        # Prepare metadata and upload to Drive
         file_metadata = {
             "name": file_name,
-            "parents": [settings.FOLDER_ID_FOR_FILES]  # فولدر الملفات مش الفيديوهات
+            "parents": [settings.FOLDER_ID_FOR_FILES]
         }
-
-        media = MediaFileUpload(file_path, resumable=True)
-        uploaded_file = drive_service.files().create(
+        media = MediaFileUpload(temp_filename, resumable=True)
+        uploaded_file_metadata = drive_service.files().create(
             body=file_metadata,
             media_body=media,
             fields="id"
         ).execute()
 
-        file_id = uploaded_file.get("id")
-
+        # Make file public
+        file_id = uploaded_file_metadata.get("id")
         drive_service.permissions().create(
             fileId=file_id,
             body={"role": "reader", "type": "anyone"},
         ).execute()
+
+        # Clean up temp file
+        os.remove(temp_filename)
 
         return f"https://drive.google.com/uc?id={file_id}"
 
@@ -161,13 +171,6 @@ def send_password_reset_email_custom(email):
 
 
 def get_or_create_drive_folder(folder_name, parent_folder_id):
-    """
-    Check if folder with folder_name exists inside parent_folder_id.
-    If yes, return its folder_id.
-    If no, create it and return new folder_id.
-    """
-
-    # Assuming you have Google Drive API client already setup as 'drive_service'
     query = f"mimeType='application/vnd.google-apps.folder' and trashed=false and name='{folder_name}' and '{parent_folder_id}' in parents"
     results = drive_service.files().list(q=query, spaces='drive',
                                          fields='files(id, name)').execute()
