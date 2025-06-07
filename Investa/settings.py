@@ -20,7 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-=9tj$u7ncfm(c1m+@lqp8#4=n8=$@-ho)_&4b7-gth7!!^r%ft'
+import os
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-=9tj$u7ncfm(c1m+@lqp8#4=n8=$@-ho)_&4b7-gth7!!^r%ft')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
@@ -173,39 +174,32 @@ from google.oauth2 import service_account
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Path to Firebase JSON key file
-FIREBASE_CREDENTIALS_PATH = os.path.join(BASE_DIR, "firebase_config.json")
-
-# Initialize Firebase Admin SDK (No need for `apiKey`, `authDomain`, etc.)
-if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+# Firebase setup
+FIREBASE_CREDENTIAL_PATH = '/etc/secrets/firebase_config.json'
+if os.path.exists(FIREBASE_CREDENTIAL_PATH):
+    cred = credentials.Certificate(FIREBASE_CREDENTIAL_PATH)
     firebase_admin.initialize_app(cred, {
-        'databaseURL': 'https://investa812-default-rtdb.firebaseio.com/'  # Replace with your actual Realtime DB URL
+        'databaseURL': os.environ.get("FIREBASE_DB_URL")
     })
+else:
+    raise Exception("Missing Firebase credential file")
 
-FIREBASE_WEB_API_KEY = "AIzaSyCGC3qzQIuPnR4xTzh2vOqahVNTunQX3QM"
-
-FIREBASE_DB_URL ="https://investa812-default-rtdb.firebaseio.com/"
-
-# Get Firebase Realtime Database Reference
+FIREBASE_WEB_API_KEY = os.environ.get("FIREBASE_WEB_API_KEY")
 FIREBASE_REALTIME_DB = db.reference()
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Path to your service account key file
-GOOGLE_DRIVE_KEY_FILE = os.path.join(BASE_DIR, "investakey.json")
-
-# Load credentials
-GOOGLE_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    GOOGLE_DRIVE_KEY_FILE,
-    scopes=["https://www.googleapis.com/auth/drive"]
-)  
-
-CORS_ALLOW_ALL_ORIGINS = True
+# Google Drive credentials
+GOOGLE_DRIVE_CREDENTIAL_PATH = '/etc/secrets/investakey.json'
+if os.path.exists(GOOGLE_DRIVE_CREDENTIAL_PATH):
+    GOOGLE_CREDENTIALS = service_account.Credentials.from_service_account_file(
+        GOOGLE_DRIVE_CREDENTIAL_PATH,
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
+else:
+    raise Exception("Missing Google Drive key file")
 
 
-FOLDER_ID_FOR_REELS='1Datr67ecjoozkP5RcuP_NZHVGuhIgat5'
-FOLDER_ID_FOR_PROJECT_PIC='1wk6wL-KxNPJ9u2XF9NUDRb0pnJ07LE_g'
-FOLDER_ID_FOR_PROFILE_PIC='1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd'
-FOLDER_ID_FOR_PROJECT_VIDEO='1KaJjwmqVy91vcW1vGg2HlDoKpvFMheYk'
-FOLDER_ID_FOR_FILES='1gti3xxw3nuT2eQFrhsICNjbiNKAp3_4w'
+FOLDER_ID_FOR_REELS = '1Datr67ecjoozkP5RcuP_NZHVGuhIgat5'
+FOLDER_ID_FOR_PROJECT_PIC = '1wk6wL-KxNPJ9u2XF9NUDRb0pnJ07LE_g'
+FOLDER_ID_FOR_PROFILE_PIC = '1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd'
+FOLDER_ID_FOR_PROJECT_VIDEO = '1KaJjwmqVy91vcW1vGg2HlDoKpvFMheYk'
+FOLDER_ID_FOR_FILES = '1gti3xxw3nuT2eQFrhsICNjbiNKAp3_4w'
