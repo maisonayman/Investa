@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, parser_classes
 import uuid
 from rest_framework.parsers import MultiPartParser, FormParser
-from Investa.utils import upload_image_to_drive, upload_video_to_drive, upload_file_to_drive
+from Investa.utils import upload_image_to_drive, get_user_data, upload_file_to_drive, get_founder_projects, get_investments_for_projects
 from rest_framework import status
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -208,18 +208,33 @@ def create_project(request):
         return Response({"error": str(e)}, status=500)
 
 
+
 @api_view(['POST'])
 def send_phase3_email(request):
     data = request.data
-    email = data.get('email')
-    user_id = data.get('user_id')  # optional for tracking
+    user_id = data.get('user_id')
+
+    if not user_id:
+        return Response({"error": "User ID is required"}, status=400)
+
+    # Fetch from Firebase
+    user_data = get_user_data(user_id)
+    if not user_data:
+        return Response({"error": "User not found in Firebase"}, status=404)
+
+    full_name = user_data.get('full_name', 'User')
+    first_two_names = " ".join(full_name.split()[:2])
+
+    email = user_data.get('email')
 
     if not email:
-        return Response({"error": "Email is required"}, status=400)
+        return Response({"error": "Email is missing in Firebase user data"}, status=400)
 
-    # Render the email HTML
+    # Render the email
     html_content = render_to_string('emails/phase3_email.html', {
-        'upload_link': f'https://yourdomain.com/upload-phase1/?user={user_id or ""}'
+        "full_name": first_two_names,
+        'email': email,
+        'upload_link': f'https://yourdomain.com/upload-phase1/?user={user_id}'
     })
 
     subject = "Phase 3: Upload Your Physical Store Picture"
@@ -233,6 +248,7 @@ def send_phase3_email(request):
         return Response({"message": "Phase 3 email sent successfully."}, status=200)
     except Exception as e:
         return Response({"error": "Failed to send email", "details": str(e)}, status=500)
+
 
 
 @api_view(['GET'])
@@ -340,7 +356,7 @@ def founder_investment_graph(request, founder_id):
 
     return Response(graph_data)
 
-
+'''
 @api_view(['GET'])
 def get_project(request, project_id):
     try:
@@ -355,6 +371,82 @@ def get_project(request, project_id):
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+'''
+
+
+# 1. Dashboard Overview API
+@api_view(['GET'])
+def founder_dashboard_overview(request, user_id):
+    projects = get_founder_projects(user_id)
+    project_ids = [p.get('id') for p in projects]
+    investments = get_investments_for_projects(project_ids)
+
+    total_invested = sum(float(inv.get('amount_invested', 0)) for inv in investments)
+    investor_ids = set(inv.get('user_id') for inv in investments)
+    revenue = sum(float(inv.get('revenue', 0)) for inv in investments)
+    realized_profit = sum(float(inv.get('current_profit', 0)) for inv in investments)
+
+    return Response({
+        "total_invested_amount": total_invested,
+        "number_of_investors": len(investor_ids),
+        "revenue": revenue,
+        "realized_profit": realized_profit
+    })
+
+
+@api_view(['GET'])
+def investment_return_vs_comparison(request, user_id):
+    projects = get_founder_projects(user_id)
+    project_ids = [p.get('id') for p in projects]
+    investments = get_investments_for_projects(project_ids)
+
+    # Dummy example grouped by month name
+    investment_return = defaultdict(float)
+    comparison_data = defaultdict(float)
+
+    for inv in investments:
+        month = inv.get('month', 'Unknown')  # Assume you store month in investment
+        investment_return[month] += float(inv.get('return', 0))
+        comparison_data[month] += float(inv.get('comparison_value', 0))
+
+    return Response({
+        "investment_return": dict(investment_return),
+        "comparison_data": dict(comparison_data)
+    })
+
+
+@api_view(['GET'])
+def portfolio_performance(request, user_id):
+    projects = get_founder_projects(user_id)
+    project_ids = [p.get('id') for p in projects]
+    investments = get_investments_for_projects(project_ids)
+
+    performance = defaultdict(float)
+    for inv in investments:
+        year = str(inv.get('year', 'Unknown'))
+        performance[year] += float(inv.get('portfolio_value', 0))
+
+    return Response(performance)
+
+
+@api_view(['GET'])
+def profit_margin_trend(request, user_id):
+    projects = get_founder_projects(user_id)
+    project_ids = [p.get('id') for p in projects]
+    investments = get_investments_for_projects(project_ids)
+
+    margins = defaultdict(float)
+    counts = defaultdict(int)
+
+    for inv in investments:
+        year = str(inv.get('year', 'Unknown'))
+        margin = inv.get('profit_margin')
+        if margin is not None:
+            margins[year] += float(margin)
+            counts[year] += 1
+
+    average_margins = {y: round(margins[y] / counts[y], 2) for y in margins if counts[y] > 0}
+    return Response(average_margins)
 
 
 class TransactionsAPI(APIView):

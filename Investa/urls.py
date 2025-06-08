@@ -45,11 +45,15 @@ from user.views import (
 from founder.views import (
     insert_project,
     insert_business_details,
-    transactions_api,
+    TransactionsAPI,
     add_product,
     create_project, 
     send_phase3_email,
-    founder_home
+    founder_home,
+    founder_dashboard_overview,
+    investment_return_vs_comparison,
+    portfolio_performance,
+    profit_margin_trend
     )
 
 # Investor app views
@@ -124,10 +128,15 @@ urlpatterns = [
     path('insert-project/', insert_project, name='insert_project'),
     path('insert-business-details/', insert_business_details, name='insert_business_details'),
     path('create-project/', create_project, name='create_project'),
-    path('transactions/', transactions_api, name="transactions_api"),
+    path('transactions/', TransactionsAPI.as_view(), name="transactions_api"),
     path('add-product/', add_product, name="add_product"),
     path('email/', send_phase3_email, name='email'),
-    path('founder-home/<str:project_id>', founder_home, name='founder_home'), 
+    path('founder-home/<str:project_id>', founder_home, name='founder_home'),
+    path('founder/dashboard/overview/<str:user_id>/', founder_dashboard_overview, name='founder_dashboard_overview'),
+    path('founder/dashboard/return-vs-comparison/<str:user_id>/', investment_return_vs_comparison, name='investment_return_vs_comparison'),
+    path('founder/dashboard/portfolio-performance/<str:user_id>/', portfolio_performance, name='portfolio_performance'),
+    path('founder/dashboard/profit-margin-trend/<str:user_id>/', profit_margin_trend, name='profit_margin_trend'),
+
 
     # Investor endpoints
     path('interests/', interests, name='interests'),
@@ -146,17 +155,17 @@ urlpatterns = [
     path('paymob-callback/', paymob_callback, name='paymob_callback'),
     path('search/', search_projects, name='search'),
     path('add-invested-project/', add_invested_project, name='add_invested_project'),
-    path('dashboard/invested-projects/<str:user_id>/', get_user_invested_projects, name='add_invested_project'),
+    path('dashboard/invested-projects/<str:user_id>/', get_user_invested_projects, name='get_user_invested_project'),
     path('roi_vs_saving/', roi_vs_saving, name="roi_vs_saving"),
     path('balance_history/', balance_history, name="balance_history"),
-
-    # Web endpoints
-    path('monthly-finance/', monthly_finance_firebase_view, name='monthly-finance'),
-    path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
     path('dashboard/<str:user_id>/growth/', get_investment_growth, name='get_investment_growth'),
     path('dashboard/<str:user_id>/investments/',get_my_investments, name='get_my_investments'),
     path('dashboard/<str:user_id>/distribution/', get_investment_distribution, name='get_investment_distribution'),
 
+    # Web endpoints
+    path('monthly-finance/', monthly_finance_firebase_view, name='monthly-finance'),
+    path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
+    
     # Swagger documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),

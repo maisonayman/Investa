@@ -773,3 +773,55 @@ def balance_history(request):
         'months': result_months,
         'amounts': result_amounts
     })
+
+
+@api_view(['GET'])
+def user_investment_project_details(request, user_id):
+    try:
+        # Get user's investments
+        investment_ref = db.reference(f'invested_projects/{user_id}')
+        investments = investment_ref.get()
+
+        if not investments:
+            return Response({"message": "No investments found"}, status=404)
+
+        response_data = []
+
+        for investment_id, investment_data in investments.items():
+            project_id = investment_data.get('project_id')
+            if not project_id:
+                continue
+
+            # Get project details
+            project_ref = db.reference(f'projects/{project_id}')
+            project_data = project_ref.get()
+
+            if not project_data:
+                continue
+
+            # Combine data
+            combined = {
+                "project_name": project_data.get("name"),
+                "category": project_data.get("category"),
+                "type": project_data.get("type"),
+                "start_date": investment_data.get("start_date"),
+                "end_of_cycle": project_data.get("end_of_cycle"),
+                "amount_of_investment": investment_data.get("amount_of_investment"),
+                "roi_expected": investment_data.get("roi_expected"),
+                "expected_roi": project_data.get("expected_roi"),
+                "total_return": project_data.get("total_return"),
+                "success_rate": project_data.get("success_rate"),
+                "reinsurance": investment_data.get("reinsurance"),
+                "current_roi_rate": investment_data.get("current_roi_rate"),
+                "roi_q1": investment_data.get("roi_q1"),
+                "roi_q2": investment_data.get("roi_q2"),
+                "current_roi": investment_data.get("current_roi"),
+            }
+
+            response_data.append(combined)
+
+        return Response(response_data)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+

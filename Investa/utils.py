@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import io
 from googleapiclient.http import MediaIoBaseUpload
-from firebase_admin import auth
+from firebase_admin import auth, db
 import uuid
 import os
 
@@ -106,8 +106,6 @@ def upload_image_to_drive(file_obj, file_name, folder_id):
         raise Exception(f"Error uploading image to Google Drive: {e}")
 
 
-
-
 def upload_file_to_drive(uploaded_file, file_name):
     """
     Accepts an uploaded file (Django InMemoryUploadedFile or TemporaryUploadedFile),
@@ -189,3 +187,20 @@ def get_or_create_drive_folder(folder_name, parent_folder_id):
         folder = drive_service.files().create(body=file_metadata,
         fields='id').execute()
         return folder.get('id')
+
+
+def get_founder_projects(user_id):
+    projects_ref = db.reference('projects')
+    projects = projects_ref.get() or {}
+    return [p for p in projects.values() if p.get('owner_id') == user_id]
+
+
+def get_investments_for_projects(project_ids):
+    investments_ref = db.reference('investments')
+    investments = investments_ref.get() or {}
+    return [inv for inv in investments.values() if inv.get('project_id') in project_ids]
+
+
+def get_user_data(user_id):
+    ref = db.reference(f'users/{user_id}')
+    return ref.get()
