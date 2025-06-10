@@ -61,7 +61,6 @@ from investor.views import (
     interests,
     get_category_percentages,
     get_user_interest_projects,
-    #get_other_projects,
     save_project,
     get_saved_projects,
     delete_saved_project,
@@ -76,7 +75,19 @@ from investor.views import (
     get_user_profile,
     closing_soon_projects,
     top_raised_projects,
-    trending_this_month
+    trending_this_month,
+    get_reports,
+    create_report,
+    update_report,
+    delete_report,
+    get_transaction_reports,
+    create_transaction_report,
+    update_transaction_report,
+    delete_transaction_report,
+    get_financial_reports,
+    create_financial_report,
+    update_financial_report,
+    delete_financial_report
 )
 
 from web.views import (
@@ -140,7 +151,6 @@ urlpatterns = [
 
     # Investor endpoints
     path('interests/', interests, name='interests'),
-    #path('get_other_projects/', get_other_projects, name='get_other_projects'),
     path('welcome/', get_user_profile, name='welcome'),
     path('interest-projects/', get_user_interest_projects, name='get_user_interest_projects'),
     path('closing-soon/', closing_soon_projects, name='closing_soon_projects'),
@@ -171,6 +181,23 @@ urlpatterns = [
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 
+    # Reports endpoints
+    path('reports/<str:project_id>/', get_reports, name='get_reports'),
+    path('reports/create/', create_report, name='create_report'),
+    path('reports/<str:report_id>/update/', update_report, name='update_report'),
+    path('reports/<str:report_id>/delete/', delete_report, name='delete_report'),
+
+    # Transaction Reports endpoints
+    path('transaction-reports/<str:project_id>/', get_transaction_reports, name='get_transaction_reports'),
+    path('transaction-reports/create/', create_transaction_report, name='create_transaction_report'),
+    path('transaction-reports/<str:report_id>/update/', update_transaction_report, name='update_transaction_report'),
+    path('transaction-reports/<str:report_id>/delete/', delete_transaction_report, name='delete_transaction_report'),
+
+    # Financial Reports endpoints
+    path('financial-reports/<str:project_id>/', get_financial_reports, name='get_financial_reports'),
+    path('financial-reports/create/', create_financial_report, name='create_financial_report'),
+    path('financial-reports/<str:report_id>/update/', update_financial_report, name='update_financial_report'),
+    path('financial-reports/<str:report_id>/delete/', delete_financial_report, name='delete_financial_report'),
 
     path('healthz', health_check),
     
