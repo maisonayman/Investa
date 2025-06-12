@@ -382,58 +382,162 @@ def get_project(request, project_id):
 # 1. Dashboard Overview API
 @api_view(['GET'])
 def founder_dashboard_overview(request, user_id):
-    projects = get_founder_projects(user_id)
-    project_ids = [p.get('project_id') for p in projects]
-    investments = get_investments_for_projects(project_ids)
+    try:
+        # Step 1: Get founder's projects
+        projects = get_founder_projects(user_id)
+        if not projects:
+            return Response({
+                "total_invested_amount": 0,
+                "number_of_investors": 0,
+                "revenue": 0,
+                "realized_profit": 0,
+                "message": "No projects found for this founder."
+            }, status=200)
 
-    total_invested = sum(float(inv.get('invested_amount', 0)) for inv in investments)
-    investor_ids = set(inv.get('user_id') for inv in investments)
-    revenue = sum(float(inv.get('rio', 0)) for inv in investments)
-    realized_profit = sum(float(inv.get('current_profit', 0)) for inv in investments)
+        # Extract project_ids from the list of project dictionaries
+        project_ids = [p.get('project_id') for p in projects if p.get('project_id')]
 
-    return Response({
-        "total_invested_amount": total_invested,
-        "number_of_investors": len(investor_ids),
-        "revenue": revenue,
-        "realized_profit": realized_profit
-    })
+        if not project_ids:
+            return Response({
+                "total_invested_amount": 0,
+                "number_of_investors": 0,
+                "revenue": 0,
+                "realized_profit": 0,
+                "message": "No valid project IDs found for this founder."
+            }, status=200)
+
+        # Step 2: Get investments related to these projects
+        investments = get_investments_for_projects(project_ids) # Pass the list of IDs
+        if not investments:
+            return Response({
+                "total_invested_amount": 0,
+                "number_of_investors": 0,
+                "revenue": 0,
+                "realized_profit": 0,
+                "message": "No investments found for the founder's projects."
+            }, status=200)
+
+        total_invested = 0
+        investor_ids = set()
+        total_roi = 0
+        total_realized_profit = 0
+
+        # Step 3: Process investments
+        for inv in investments:
+            # Handle invested_amount (string to float)
+            invested_amount_str = inv.get('invested_amount', '0')
+            try:
+                total_invested += float(invested_amount_str)
+            except ValueError:
+                print(f"Warning: Could not convert invested_amount '{invested_amount_str}' to float for investment {inv.get('project_id')}")
+
+            # Collect unique investor IDs
+            investor_user_id = inv.get('user_id')
+            if investor_user_id:
+                investor_ids.add(investor_user_id)
+
+            # Handle ROI (string to float) - assuming 'roi' is a number string like "100" (for 100%)
+            roi_str = inv.get('roi', '0')
+            try:
+                total_roi += float(roi_str)
+            except ValueError:
+                print(f"Warning: Could not convert roi '{roi_str}' to float for investment {inv.get('project_id')}")
+
+            # Handle current_profit ("30%") - needs parsing
+            current_profit_str = inv.get('current_profit', '0%')
+            if isinstance(current_profit_str, str) and '%' in current_profit_str:
+                current_profit_str = current_profit_str.replace('%', '') # Remove '%'
+            try:
+                profit_value = float(current_profit_str)
+                total_realized_profit += profit_value
+            except ValueError:
+                print(f"Warning: Could not convert current_profit '{current_profit_str}' to float for investment {inv.get('project_id')}")
+
+        return Response({
+            "total_invested_amount": total_invested,
+            "number_of_investors": len(investor_ids),
+            "revenue": total_roi,
+            "realized_profit": total_realized_profit
+        }, status=200)
+
+    except Exception as e:
+        import traceback
+        print(f"Error in founder_dashboard_overview API for user {user_id}: {e}")
+        traceback.print_exc() # Prints the full traceback to the console/logs
+        return JsonResponse({'error': f'An internal server error occurred: {e}'}, status=500)
 
 
 @api_view(['GET'])
 def investment_return_vs_comparison(request, user_id):
     projects = get_founder_projects(user_id)
-    project_id = [p.get('projectId') for p in projects]
-    investments = get_investments_for_projects(project_id)
+    project_ids = [p.get('project_id') for p in projects]
+    investments = get_investments_for_projects(project_ids)
 
-    # Dummy example grouped by month name
     investment_return = defaultdict(float)
     comparison_data = defaultdict(float)
 
     for inv in investments:
-        month = inv.get('invested_at', 'january')  # Assume you store month in investment
-        investment_return[month] += float(inv.get('roi', 30))
-        comparison_data[month] += float(inv.get('comparison_value', 50))
+        try:
+            invested_date = datetime.strptime(inv.get('invested_at'), "%Y-%m-%d")
+            month = invested_date.strftime('%b')
+        except Exception:
+            month = "Jan"
+
+        roi = float(inv.get('roi', 30))
+        investment_return[month] += roi
+
+        # 👇 هنا بنحسب قيمة المقارنة كمثال: 90% من ROI الفعلي
+        comparison_data[month] += roi * 0.9
 
     return Response({
         "investment_return": dict(investment_return),
         "comparison_data": dict(comparison_data)
     })
 
-
 @api_view(['GET'])
 def portfolio_performance(request, user_id):
-    projects = get_founder_projects(user_id)
-    project_id = [p.get('id') for p in projects]
-    investments = get_investments_for_projects(project_id)
+    try:
+        projects = get_founder_projects(user_id)
+        project_ids_for_filter = [p.get('project_id') for p in projects if p.get('project_id')]
+        investments = get_investments_for_projects(project_ids_for_filter)
 
-    performance = defaultdict(float)
-    for inv in investments:
-        year = str(inv.get('year', 'january'))
-        performance[year] += float(inv.get('portfolio_value', 50))
+        performance = defaultdict(float)
 
-    return Response(performance)
+        for inv in investments:
+            invested_at_str = inv.get('invested_at')
+            month_abbr = 'unknown_month' # Default value if parsing fails
 
+            if invested_at_str and isinstance(invested_at_str, str):
+                try:
+                    # Parse the string to a datetime object
+                    dt_object = datetime.strptime(invested_at_str, "%Y-%m-%d %H:%M:%S")
+                    # Format to get the abbreviated month name (e.g., "Jan", "Feb")
+                    month_abbr = dt_object.strftime("%b")
+                except ValueError:
+                    # Handle cases where the date string is malformed
+                    print(f"Warning: Could not parse date from invested_at '{invested_at_str}' for investment {inv.get('project_id')}")
+                    month_abbr = 'invalid_date' # Or handle as per your requirement
 
+            current_portfolio_value = 0.0
+            invested_amount_str = inv.get('invested_amount', '0')
+            current_profit_str = inv.get('current_profit', '0%')
+
+            try: current_portfolio_value += float(invested_amount_str)
+            except ValueError: pass
+
+            if isinstance(current_profit_str, str) and '%' in current_profit_str:
+                current_profit_str = current_profit_str.replace('%', '')
+            try: current_portfolio_value += float(current_profit_str)
+            except ValueError: pass
+
+            performance[month_abbr] += current_portfolio_value
+
+        return Response(performance, status=200)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': f'An internal server error occurred: {e}'}, status=500)
 @api_view(['GET'])
 def profit_margin_trend(request, user_id):
     projects = get_founder_projects(user_id)

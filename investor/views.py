@@ -5,13 +5,24 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from collections import Counter
 from django.conf import settings
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from rest_framework.permissions import AllowAny
 from rest_framework import status
 from collections import defaultdict
 from rest_framework.views import APIView
+import firebase_admin
+from firebase_admin import credentials
+from django.views.decorators.csrf import csrf_exempt
 
+# Initialize Firebase (make sure this is done only once)
+try:
+    firebase_admin.get_app()
+except ValueError:
+    cred = credentials.Certificate("path/to/your/serviceAccountKey.json")
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'your-firebase-database-url'
+    })
 
 @api_view(['POST'])
 def interests(request):
@@ -1611,3 +1622,146 @@ def total_investments(request, user_id):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_revenue_growth(request, project_id):
+    """
+    Get revenue growth data aggregated by daily, monthly, or yearly periods.
+    Query parameters: period (daily, monthly, yearly)
+    """
+    try:
+        period = request.query_params.get('period', 'yearly').lower() # Default to yearly
+        valid_periods = ['daily', 'monthly', 'yearly']
+
+        if period not in valid_periods:
+            return Response({
+                'error': f'Invalid period. Must be one of: {", ".join(valid_periods)}',
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        print(f"Fetching revenue data for project {project_id} with period {period}") # Debug print
+
+        # Fetch all revenue entries for the project
+        revenue_ref = db.reference(f'projects/{project_id}/revenue_entries')
+        revenue_entries = revenue_ref.get()
+
+        if not revenue_entries:
+            return Response({
+                'data': [],
+                'message': 'No revenue data found for this project',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+        
+        # Aggregate data
+        aggregated_data = defaultdict(float)
+        
+        for entry_id, entry_data in revenue_entries.items():
+            date_str = entry_data.get('date')
+            amount = float(entry_data.get('amount', 0))
+
+            if not date_str or not amount:
+                continue
+
+            try:
+                entry_date = datetime.strptime(date_str, '%Y-%m-%d')
+            except ValueError:
+                continue # Skip invalid dates
+
+            key = ""
+            if period == 'daily':
+                key = entry_date.strftime('%Y-%m-%d')
+            elif period == 'monthly':
+                key = entry_date.strftime('%Y-%m')
+            elif period == 'yearly':
+                key = entry_date.strftime('%Y')
+            
+            aggregated_data[key] += amount
+
+        # Sort data by key (date/month/year)
+        sorted_data = sorted(aggregated_data.items())
+        
+        # Format for response
+        formatted_results = [{'period': k, 'revenue': v} for k, v in sorted_data]
+
+        return Response({
+            'data': formatted_results,
+            'message': f'Revenue growth data ({period}) retrieved successfully',
+            'status': 'success'
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print("Error in get_revenue_growth:", str(e)) # Debug print
+        return Response({
+            'error': str(e),
+            'status': 'error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_revenue_entry(request):
+    """
+    Create a new revenue entry for a project.
+    Expected data: project_id, date (YYYY-MM-DD), amount (number)
+    """
+    print("Method:", request.method)
+    print("Request Data:", request.data)
+    
+    try:
+        data = request.data
+
+        required_fields = ['project_id', 'date', 'amount']
+        missing_fields = [field for field in required_fields if field not in data]
+
+        if missing_fields:
+            return Response({
+                'error': f'Missing required fields: {", ".join(missing_fields)}',
+                'status': 'error',
+                'received_data': data
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate date format
+        try:
+            datetime.strptime(data.get('date'), '%Y-%m-%d')
+        except ValueError:
+            return Response({
+                'error': 'Invalid date format. Expected YYYY-MM-DD.',
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate amount is a number
+        try:
+            amount = float(data.get('amount'))
+        except ValueError:
+            return Response({
+                'error': 'Invalid amount. Must be a number.',
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        revenue_entry_data = {
+            'date': data.get('date'),
+            'amount': amount,
+            'created_at': datetime.now().isoformat()
+        }
+
+        # Add entry to Firebase
+        revenue_ref = db.reference(f'projects/{data.get("project_id")}/revenue_entries')
+        new_entry = revenue_ref.push(revenue_entry_data)
+
+        return Response({
+            'data': {
+                'id': new_entry.key,
+                **revenue_entry_data
+            },
+            'message': 'Revenue entry created successfully',
+            'status': 'success'
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        print("Error in create_revenue_entry:", str(e))
+        return Response({
+            'error': str(e),
+            'status': 'error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
