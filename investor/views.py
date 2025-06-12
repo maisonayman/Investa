@@ -5,51 +5,44 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from collections import Counter
 from django.conf import settings
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework import status
 from collections import defaultdict
-import firebase_admin
-from firebase_admin import credentials
 from rest_framework.views import APIView
 
-# Initialize Firebase (make sure this is done only once)
-try:
-    firebase_admin.get_app()
-except ValueError:
-    cred = credentials.Certificate("path/to/your/serviceAccountKey.json")
-    firebase_admin.initialize_app(cred, {
-        'databaseURL': 'your-firebase-database-url'
-    })
 
 @api_view(['POST'])
 def interests(request):
     try:
         data = json.loads(request.body)
-        #user_id = data.get('user_id')
+        user_id = data.get('user_id')
         interests = data.get('interests', [])
 
-        #if not user_id or not isinstance(interests, list):
-           #return JsonResponse({'error': 'Invalid data'}, status=400)
+        if not user_id or not isinstance(interests, list):
+            return JsonResponse({'error': 'Invalid data'}, status=400)
 
-        ref = db.reference(f'user_interests/')
-        ref.set({
-            'interests': interests
-       })
+        user_ref = db.reference(f'users/{user_id}')
+        user_data = user_ref.get()
+
+        if not user_data:
+            return JsonResponse({'error': 'User not found'}, status=404)
+
+        user_data['interests'] = interests
+        user_ref.set(user_data)
 
         return JsonResponse({'status': 'success'}, status=200)
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 
 @api_view(['GET'])
-def get_user_profile(request):
+def investor_profile(request,user_id):
     """Get user's name and profile picture from Firebase."""
     try:
-        user_id = "3SB8WbQqi9Xeq6ztKbv6ZWPGhM33"  # 🔁 Replace with your testing user ID
-
+        user_id = user_id.strip()
         users_ref = db.reference("users")
         user_data = users_ref.child(user_id).get()
         
@@ -72,22 +65,31 @@ def get_user_profile(request):
 
 
 @api_view(['GET'])
-def get_user_interest_projects(request):
+def get_user_interest_projects(request, user_id):
     try:
-        user_id = "3SB8WbQqi9Xeq6ztKbv6ZWPGhM33"  # 🔁 Replace with your testing user ID
-
+        user_id = user_id.strip()
         user_ref = db.reference(f'users/{user_id}')
         user_data = user_ref.get()
-        interests = user_data.get('interests', [])
 
-        print("User Interests:", interests)  # 👀
+        if not user_data:
+            return JsonResponse({'error': 'User not found'}, status=404)
+
+        # قراءة الاهتمامات وتحويلها لـ lowercase
+        interests = user_data.get('interests', [])
+        interests = [i.lower() for i in interests if isinstance(i, str)]
+
+        print("User Interests:", interests)
 
         projects_ref = db.reference('projects')
         all_projects = projects_ref.get()
 
+        if not all_projects:
+            return JsonResponse([], safe=False)
+
+        # مطابقة المشاريع حسب الاهتمامات
         matching_projects = [
             project for project in all_projects.values()
-            if project.get('projectCategory') in interests
+            if project.get('projectCategory', '').lower() in interests
         ]
 
         print(f"Matching projects for user {user_id}:", matching_projects)
@@ -96,6 +98,7 @@ def get_user_interest_projects(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
 
 
 @api_view(['GET'])
@@ -215,19 +218,15 @@ def trending_this_month(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['POST'])
-def save_project(request):
-    if request.method == 'POST':
+class SavedProjectsAPI(APIView):
+    def post(self, request):
         try:
-            body = json.loads(request.body.decode('utf-8'))
-
-            user_id = body.get('user_id')
-            project_id = body.get('project_id')
+            user_id = request.data.get('user_id')
+            project_id = request.data.get('project_id')
 
             if not (user_id and project_id):
-                return JsonResponse({'error': 'Missing fields'}, status=400)
+                return Response({'error': 'Missing fields'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # حفظ الربط في Firebase Realtime Database
             ref = db.reference(f'saved_projects/{user_id}')
             saved_data = {
                 'project_id': project_id,
@@ -235,18 +234,15 @@ def save_project(request):
             }
             new_ref = ref.push(saved_data)
 
-            return JsonResponse({'message': 'Project saved successfully', 'saved_id': new_ref.key}, status=201)
+            return Response({
+                'message': 'Project saved successfully',
+                'saved_id': new_ref.key
+            }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
-
-
-@csrf_exempt
-def get_saved_projects(request, user_id):
-    
-    if request.method == 'GET':
+    def get(self, request, user_id):
         try:
             limit = int(request.GET.get('limit', 10))
             offset = int(request.GET.get('offset', 0))
@@ -254,41 +250,33 @@ def get_saved_projects(request, user_id):
             ref = db.reference(f'saved_projects/{user_id}')
             projects = ref.get()
 
-            if projects:
-                project_list = []
-                for key, value in projects.items():
-                    value['id'] = key
-                    project_list.append(value)
+            if not projects:
+                return Response({'message': 'No saved projects found'}, status=status.HTTP_404_NOT_FOUND)
 
-                project_list.sort(key=lambda x: x['saved_at'], reverse=True)
-                paginated = project_list[offset:offset+limit]
+            project_list = []
+            for key, value in projects.items():
+                value['id'] = key
+                project_list.append(value)
 
-                return JsonResponse(paginated, safe=False, status=200)
-            else:
-                return JsonResponse({'message': 'No saved projects found'}, status=404)
+            project_list.sort(key=lambda x: x['saved_at'], reverse=True)
+            paginated = project_list[offset:offset + limit]
+
+            return Response(paginated, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
-
-
-@csrf_exempt
-def delete_saved_project(request, user_id, saved_id):
-   
-    if request.method == 'DELETE':
+    def delete(self, request, user_id, saved_id):
         try:
             ref = db.reference(f'saved_projects/{user_id}/{saved_id}')
-            if ref.get():
-                ref.delete()
-                return JsonResponse({'message': 'Saved project deleted successfully'}, status=200)
-            else:
-                return JsonResponse({'error': 'Saved project not found'}, status=404)
+            if not ref.get():
+                return Response({'error': 'Saved project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            ref.delete()
+            return Response({'message': 'Saved project deleted successfully'}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -616,110 +604,45 @@ def get_project_by_id(request, project_id):
 @api_view(['GET'])
 def get_user_invested_projects(request, user_id):
     """
-    Get all invested projects for a given user_id, grouped by project.
-    Sums the ROI and investment amount per project and includes project name and investment type.
+    Get investments for a user from users/{user_id}/investments,
+    grouped by project and combined with project info.
     """
     try:
-        invested_ref = db.reference('invested_projects')
-        all_investments = invested_ref.get() or {}
+        user_ref = db.reference(f'users/{user_id}/investments')
+        user_investments = user_ref.get() or {}
+
+        if not user_investments:
+            return JsonResponse({"message": "No investments found for this user."}, status=404)
 
         projects_ref = db.reference('projects')
         all_projects = projects_ref.get() or {}
 
-        grouped_investments = {}
+        results = []
 
-        for inv_id, inv_data in all_investments.items():
-            if inv_data.get('user_id') != user_id:
-                continue
-
-            project_id = inv_data.get('project_id')
+        for project_id, inv_data in user_investments.items():
             roi = float(inv_data.get('roi', 0))
+            investment_type = inv_data.get('investment_type', 'N/A')
+            project_name = all_projects.get(project_id, {}).get('projectName', 'Unknown Project')
 
-            if project_id not in grouped_investments:
-                grouped_investments[project_id] = {
-                    'project_id': project_id,
-                    'project_name': all_projects.get(project_id, {}).get('projectName', 'Unknown Project'),
-                    'total_roi': roi,
-                    'next_roi': roi-100,
-                }
-            else:
-                grouped_investments[project_id]['total_roi'] += roi
+            results.append({
+                'project_id': project_id,
+                'project_name': project_name,
+                'total_roi': roi,
+                'next_roi': roi - 100,
+                'investment_type': investment_type
+            })
 
-        if not grouped_investments:
-            return JsonResponse({"message": "No investments found for this user."}, status=404)
-
-        # Convert dict to list
-        result = list(grouped_investments.values())
-
-        return JsonResponse(result, safe=False, status=200)
-
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-@api_view(['POST'])
-def add_invested_project(request):
-    """
-    Manually add an investment to the invested_projects node
-    and also under the user's investments node.
-    
-    Expected JSON body:
-    {
-        "user_id": "user123",
-        "project_id": "project456",
-        "invested_amount": 1000,
-        "roi": 100,
-        "investment_type": "short"  # or "long"
-    }
-    """
-    try:
-        data = request.data
-        user_id = data.get("user_id")
-        project_id = data.get("project_id")
-        invested_amount = data.get("invested_amount")
-        roi = data.get("roi")
-        investment_type = data.get("investment_type")
-
-        if not all([user_id, project_id, invested_amount, roi, investment_type]):
-            return JsonResponse({"error": "Missing fields"}, status=400)
-        
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        investment_data = {
-            "user_id": user_id,
-            "project_id": project_id,
-            "invested_amount": invested_amount,
-            "roi": roi,
-            "investment_type": investment_type,
-            "invested_at": timestamp,
-            "status": "active"
-        }
-
-        # Save to invested_projects
-        db.reference("invested_projects").push(investment_data)
-
-        # Save to user's node
-        db.reference(f"users/{user_id}/investments").push({
-            "project_id": project_id,
-            "invested_amount": invested_amount,
-            "roi": roi,
-            "investment_type": investment_type,
-            "invested_at": timestamp,
-            "status": "active"
-        })
-
-        return JsonResponse({"message": "Investment added successfully"}, status=201)
+        return JsonResponse(results, safe=False, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
 
 @api_view(['GET'])
-def roi_vs_saving(request):
-    user_id = request.GET.get('user_id')  # Or get from auth
+def roi_vs_saving(request, user_id):
 
     # Fetch user's monthly save value from Firebase
-    monthlysave_ref = db.reference(f'anonymous_profiles/{user_id}/monthlysave')
+    monthlysave_ref = db.reference(f'users/{user_id}/monthlysave')
     monthlysave = monthlysave_ref.get()
 
     if not monthlysave:
@@ -749,10 +672,9 @@ def roi_vs_saving(request):
 
 
 @api_view(['GET'])
-def balance_history(request):
-    user_id = request.GET.get('user_id')  # Or from token
+def balance_history(request, user_id):
 
-    ref = db.reference(f'user_investments/{user_id}')
+    ref = db.reference(f'users/{user_id}/investments')
     investments = ref.get()
 
     if not investments:
@@ -785,54 +707,117 @@ def balance_history(request):
     })
 
 
-@api_view(['GET'])
-def user_investment_project_details(request, user_id):
+@api_view(['POST'])
+def add_invested_project(request):
+    """
+    Manually add an investment to the invested_projects node
+    and also under the user's investments node.
+
+    Expected JSON body:
+    {
+        "user_id": "user123",
+        "project_id": "project456",
+        "invested_amount": 1000,
+        "roi": 100,
+        "investment_type": "short"
+    }
+    """
     try:
-        # Get user's investments
-        investment_ref = db.reference(f'invested_projects/{user_id}')
-        investments = investment_ref.get()
+        data = request.data
+        user_id = data.get("user_id")
+        project_id = data.get("project_id")
+        invested_amount = data.get("invested_amount")
+        roi = data.get("roi")
+        investment_type = data.get("investment_type")
 
-        if not investments:
-            return Response({"message": "No investments found"}, status=404)
+        if not all([user_id, project_id, invested_amount, roi, investment_type]):
+            return JsonResponse({"error": "Missing fields"}, status=400)
 
-        response_data = []
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        for investment_id, investment_data in investments.items():
-            project_id = investment_data.get('project_id')
-            if not project_id:
-                continue
+        investment_data = {
+            "user_id": user_id,
+            "project_id": project_id,
+            "invested_amount": invested_amount,
+            "roi": roi,
+            "investment_type": investment_type,
+            "invested_at": timestamp,
+            "status": "active",
+            # You can add additional fields like:
+            "start_date": timestamp,
+            "reinsurance": "",
+            "current_roi_rate": 0,
+            "roi_q1": 0,
+            "roi_q2": 0,
+            "current_roi": 0,
+            "amount_of_investment": invested_amount,
+            "roi_expected": roi,
+        }
 
-            # Get project details
-            project_ref = db.reference(f'projects/{project_id}')
-            project_data = project_ref.get()
+        # Save to invested_projects node
+        invested_ref = db.reference("invested_projects").push(investment_data)
 
-            if not project_data:
-                continue
+        # Save to user's investments with the same investment ID
+        investment_id = invested_ref.key
+        db.reference(f"users/{user_id}/investments/{investment_id}").set(investment_data)
 
-            # Combine data
-            combined = {
-                "project_name": project_data.get("name"),
-                "category": project_data.get("category"),
-                "type": project_data.get("type"),
-                "start_date": investment_data.get("start_date"),
-                "end_of_cycle": project_data.get("end_of_cycle"),
-                "amount_of_investment": investment_data.get("amount_of_investment"),
-                "roi_expected": investment_data.get("roi_expected"),
-                "expected_roi": project_data.get("expected_roi"),
-                "total_return": project_data.get("total_return"),
-                "success_rate": project_data.get("success_rate"),
-                "reinsurance": investment_data.get("reinsurance"),
-                "current_roi_rate": investment_data.get("current_roi_rate"),
-                "roi_q1": investment_data.get("roi_q1"),
-                "roi_q2": investment_data.get("roi_q2"),
-                "current_roi": investment_data.get("current_roi"),
-            }
-
-            response_data.append(combined)
-
-        return Response(response_data)
+        return JsonResponse({
+            "message": "Investment added successfully",
+            "investment_id": investment_id
+        }, status=201)
 
     except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+def user_investment_project_details(request, user_id, investments_id):
+    """
+    Get full investment + project info for a specific investment ID.
+    """
+    try:
+        # Get the specific investment
+        investment_ref = db.reference(f'users/{user_id}/investments/{investments_id}')
+        investment_data = investment_ref.get()
+
+        if not investment_data:
+            return Response({"message": "Investment not found"}, status=404)
+
+        project_id = investment_data.get('project_id')
+        if not project_id:
+            return Response({"message": "Project ID not found in investment"}, status=400)
+
+        # Get project data
+        project_ref = db.reference(f'projects/{project_id}')
+        project_data = project_ref.get()
+
+        if not project_data:
+            return Response({"message": "Project not found"}, status=404)
+
+        # Combine data
+        combined = {
+            "project_name": project_data.get("projectName"),
+            "category": project_data.get("projectCategory"),
+            "type": project_data.get("investment_type"),
+            "start_date": investment_data.get("projectStartDate"),
+            "end_of_cycle": project_data.get("end_of_cycle"),
+            "amount_of_investment": investment_data.get("invested_amount"),
+            "roi_expected": investment_data.get("roi"),
+            "expected_roi": project_data.get("roi"),
+            "total_return": project_data.get("total_return"),
+            "success_rate": project_data.get("success_rate"),
+            "reinsurance": investment_data.get("reinsurance"),
+            "current_roi_rate": investment_data.get("roi"),
+            "roi_q1": investment_data.get("roi"),
+            "roi_q2": investment_data.get("roi"),
+            "current_roi": investment_data.get("roi"),
+        }
+
+        return Response(combined, status=200)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return Response({"error": str(e)}, status=500)
 
 
@@ -889,6 +874,7 @@ def get_reports(request, project_id):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -959,6 +945,7 @@ def create_report(request):
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['PUT'])
 @permission_classes([AllowAny])
 def update_report(request, report_id):
@@ -1009,6 +996,7 @@ def update_report(request, report_id):
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['DELETE'])
 @permission_classes([AllowAny])
 def delete_report(request, report_id):
@@ -1043,6 +1031,7 @@ def delete_report(request, report_id):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -1097,6 +1086,7 @@ def get_transaction_reports(request, project_id):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class CreateTransactionReportView(APIView):
     permission_classes = [AllowAny]
@@ -1171,6 +1161,7 @@ class CreateTransactionReportView(APIView):
                 'status': 'error'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['PUT'])
 @permission_classes([AllowAny])
 def update_transaction_report(request, report_id):
@@ -1222,6 +1213,7 @@ def update_transaction_report(request, report_id):
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['DELETE'])
 @permission_classes([AllowAny])
 def delete_transaction_report(request, report_id):
@@ -1257,6 +1249,7 @@ def delete_transaction_report(request, report_id):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class CreateFinancialReportView(APIView):
     permission_classes = [AllowAny]
@@ -1323,6 +1316,7 @@ class CreateFinancialReportView(APIView):
                 'status': 'error'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_financial_reports(request, project_id):
@@ -1360,6 +1354,7 @@ def get_financial_reports(request, project_id):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['PUT'])
 @permission_classes([AllowAny])
@@ -1414,6 +1409,7 @@ def update_financial_report(request, report_id):
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['DELETE'])
 @permission_classes([AllowAny])
 def delete_financial_report(request, report_id):
@@ -1443,6 +1439,7 @@ def delete_financial_report(request, report_id):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -1507,6 +1504,7 @@ def create_financial_report(request):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -1580,3 +1578,36 @@ def create_transaction_report(request):
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+@api_view(['GET'])
+def total_investments(request, user_id):
+    """
+    Get investments for a user from users/{user_id}/investments,
+    grouped by project and combined with project info.
+    """
+    try:
+        user_ref = db.reference(f'users/{user_id}/investments')
+        user_investments = user_ref.get() or {}
+
+        if not user_investments:
+            return JsonResponse({"message": "No investments found for this user."}, status=404)
+
+        projects_ref = db.reference('projects')
+        all_projects = projects_ref.get() or {}
+
+        results = []
+
+        for project_id, inv_data in user_investments.items():
+            invested_at = inv_data.get('invested_at', 0)
+            project_name = all_projects.get(project_id, {}).get('projectName', 'Unknown Project')
+
+            results.append({
+                'project_id': project_id,
+                'project_name': project_name,
+                'start_date': invested_at,
+            })
+
+        return JsonResponse(results, safe=False, status=200)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

@@ -120,9 +120,8 @@ def sign_in(request):
         password = data.get("password")
 
         if not email or not password:
-            return JsonResponse({"message": "Missing email or password"}, status=400)
+            return JsonResponse({"message": "Email and password are required."}, status=400)
 
-        # Firebase REST API endpoint for sign in
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={settings.FIREBASE_WEB_API_KEY}"
 
         payload = {
@@ -135,19 +134,24 @@ def sign_in(request):
         result = response.json()
 
         if "error" in result:
-            return JsonResponse({"message": result["error"]["message"]}, status=401)
+            error_message = result["error"]["message"]
+            if error_message in ["EMAIL_NOT_FOUND", "INVALID_PASSWORD"]:
+                return JsonResponse({"message": "Invalid email or password."}, status=401)
+            elif error_message == "USER_DISABLED":
+                return JsonResponse({"message": "Your account has been disabled."}, status=403)
+            else:
+                return JsonResponse({"message": "Login failed. Please try again."}, status=400)
 
         user_id = result["localId"]
         id_token = result["idToken"]
 
-        # Get user data from Realtime Database
         db_url = f"{settings.FIREBASE_DB_URL}/users/{user_id}.json?auth={id_token}"
         user_response = requests.get(db_url)
         user_data = user_response.json()
 
         if user_data is None:
             return JsonResponse({
-                "message": "Sign-in successful, but user details not found in database.",
+                "message": "Sign-in successful, but user details not found.",
                 "idToken": id_token,
                 "refreshToken": result["refreshToken"],
                 "user_id": user_id,
@@ -165,7 +169,7 @@ def sign_in(request):
         })
 
     except Exception as e:
-        return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
+        return JsonResponse({"message": "An unexpected error occurred. Please try again."}, status=500)
 
 
 class PersonalDataList(APIView):
@@ -351,8 +355,8 @@ def life_picture(request):
         folder_id = "1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd"
         image_url = upload_image_to_drive(uploaded_file, file_name, folder_id)
 
-        ref = db.reference("users").child(user_id).child("life_picture")
-        ref.set({"profile_picture": image_url})
+        ref = db.reference("users").child(user_id)
+        ref.update({"profile_picture": image_url})
 
         return JsonResponse({'message': 'Life picture uploaded.', 'url': image_url})
 
@@ -468,3 +472,141 @@ def get_reels(request):
         return Response({"error": str(e)}, status=500) 
 
 
+@api_view(['POST'])
+def change_password(request):
+    try:
+        data = request.data
+        email = data.get('email')
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_new_password')
+
+        if not all([email, old_password, new_password, confirm_password]):
+            return Response({'error': 'All fields are required.'}, status=400)
+
+        if new_password != confirm_password:
+            return Response({'error': 'New passwords do not match.'}, status=400)
+
+        # Step 1: Sign in with email and old password
+        sign_in_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={settings.FIREBASE_API_KEY}"
+        sign_in_payload = {
+            "email": email,
+            "password": old_password,
+            "returnSecureToken": True
+        }
+        sign_in_response = requests.post(sign_in_url, json=sign_in_payload)
+
+        if sign_in_response.status_code != 200:
+            return Response({'error': 'Old password is incorrect.'}, status=400)
+
+        id_token = sign_in_response.json().get('idToken')
+
+        # Step 2: Update password
+        update_url = f"https://identitytoolkit.googleapis.com/v1/accounts:update?key={settings.FIREBASE_API_KEY}"
+        update_payload = {
+            "idToken": id_token,
+            "password": new_password,
+            "returnSecureToken": True
+        }
+        update_response = requests.post(update_url, json=update_payload)
+
+        if update_response.status_code == 200:
+            return Response({'message': 'Password changed successfully.'}, status=200)
+        else:
+            return Response({'error': 'Failed to change password.'}, status=400)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+def change_email(request):
+    try:
+        data = request.data
+        old_email = data.get('old_email')
+        new_email = data.get('new_email')
+        password = data.get('password')
+
+        if not all([old_email, new_email, password]):
+            return Response({'error': 'All fields are required.'}, status=400)
+
+        # Step 1: Sign in with old email and password
+        sign_in_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={settings.FIREBASE_API_KEY}"
+        sign_in_payload = {
+            "email": old_email,
+            "password": password,
+            "returnSecureToken": True
+        }
+        sign_in_response = requests.post(sign_in_url, json=sign_in_payload)
+
+        if sign_in_response.status_code != 200:
+            return Response({'error': 'Incorrect old email or password.'}, status=400)
+
+        id_token = sign_in_response.json().get('idToken')
+
+        # Step 2: Change email
+        update_url = f"https://identitytoolkit.googleapis.com/v1/accounts:update?key={settings.FIREBASE_API_KEY}"
+        update_payload = {
+            "idToken": id_token,
+            "email": new_email,
+            "returnSecureToken": True
+        }
+        update_response = requests.post(update_url, json=update_payload)
+
+        if update_response.status_code == 200:
+            return Response({'message': 'Email changed successfully.'}, status=200)
+        else:
+            return Response({'error': 'Failed to change email.'}, status=400)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+def delete_account(request):
+    try:
+        data = request.data
+        email = data.get("email")
+        password = data.get("password")
+        user_id = data.get("user_id")
+
+        if not all([email, password, user_id]):
+            return Response({"error": "email, password, and user_id are required."}, status=400)
+
+        # Step 1: Sign in to get idToken
+        sign_in_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={settings.FIREBASE_API_KEY}"
+        sign_in_payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True
+        }
+        sign_in_response = requests.post(sign_in_url, json=sign_in_payload)
+
+        if sign_in_response.status_code != 200:
+            return Response({"error": "Authentication failed. Check email or password."}, status=401)
+
+        id_token = sign_in_response.json().get("idToken")
+
+        # Step 2: Delete from Firebase Authentication
+        delete_auth_url = f"https://identitytoolkit.googleapis.com/v1/accounts:delete?key={settings.FIREBASE_API_KEY}"
+        delete_auth_response = requests.post(delete_auth_url, json={"idToken": id_token})
+
+        if delete_auth_response.status_code != 200:
+            return Response({"error": "Failed to delete from Firebase Auth."}, status=400)
+
+        # Step 3: Delete all associated nodes in Realtime Database
+        paths_to_delete = [
+            f"users/{user_id}",
+            f"saved_projects/{user_id}",
+            f"invested_projects/{user_id}", 
+            f"projects/{user_id}", 
+            f"reels/{user_id}"  
+        ]
+
+        for path in paths_to_delete:
+            db.reference(path).delete()
+
+        return Response({"message": "User account and all related data deleted successfully."}, status=200)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

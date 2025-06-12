@@ -114,9 +114,13 @@ def insert_business_details(request):
 def create_project(request):
     data = request.data
     files = request.FILES
-    project_id = str(uuid.uuid4())  # ONE ID for all sections
-
+    project_id = str(uuid.uuid4())
+    
     try:
+        user_id = data.get("user_id")
+        if not user_id:
+            return Response({"error": "user_id is required."}, status=400)
+
         # --- Upload logo
         project_logo_url = ""
         if "projectLogoFileName" in files:
@@ -126,7 +130,7 @@ def create_project(request):
                 folder_id=settings.FOLDER_ID_FOR_PROJECT_PIC
             )
 
-        # --- Upload media files using updated upload_file_to_drive()
+        # --- Upload optional docs
         def upload_optional_doc(field_name, filename_suffix):
             file = files.get(field_name)
             if file:
@@ -140,8 +144,9 @@ def create_project(request):
         financial_summary_url = upload_optional_doc("financialSummaryFile", "financial_summary.pdf")
         business_plan_url = upload_optional_doc("simplifiedBusinessPlanFile", "business_plan.pdf")
 
-        # --- Project Info
+        # --- Project Info (added userId)
         project_info = {
+            "userId": user_id,
             "projectName": data.get("projectName"),
             "briefDescription": data.get("briefDescription"),
             "detailedDescription": data.get("detailedDescription"),
@@ -168,7 +173,6 @@ def create_project(request):
             "projectLogoUrl": project_logo_url,
         }
 
-        # --- Analysis Info
         analysis_info = {
             "projectId": project_id,
             "strengths": data.get("strengths"),
@@ -181,7 +185,6 @@ def create_project(request):
             "competitors": data.get("competitors"),
         }
 
-        # --- Media Info
         media_info = {
             "projectId": project_id,
             "photosVideosMedia": data.get("photosVideosMedia"),
@@ -194,10 +197,13 @@ def create_project(request):
             "simplifiedBusinessPlanFileUrl": business_plan_url,
         }
 
-        # --- Save to Firebase using the same ID
+        # --- Save to Firebase
         db.reference(f'projects/{project_id}').set(project_info)
         db.reference(f'analysis/{project_id}').set(analysis_info)
         db.reference(f'media_and_attachments/{project_id}').set(media_info)
+
+        # (اختياري) احفظ تحت المستخدم كمان:
+        db.reference(f'users/{user_id}/projects/{project_id}').set({"created": True})
 
         return Response({
             "message": "success",
@@ -356,7 +362,7 @@ def founder_investment_graph(request, founder_id):
 
     return Response(graph_data)
 
-'''
+
 @api_view(['GET'])
 def get_project(request, project_id):
     try:
@@ -371,19 +377,18 @@ def get_project(request, project_id):
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-'''
 
 
 # 1. Dashboard Overview API
 @api_view(['GET'])
 def founder_dashboard_overview(request, user_id):
     projects = get_founder_projects(user_id)
-    project_ids = [p.get('id') for p in projects]
+    project_ids = [p.get('project_id') for p in projects]
     investments = get_investments_for_projects(project_ids)
 
-    total_invested = sum(float(inv.get('amount_invested', 0)) for inv in investments)
+    total_invested = sum(float(inv.get('invested_amount', 0)) for inv in investments)
     investor_ids = set(inv.get('user_id') for inv in investments)
-    revenue = sum(float(inv.get('revenue', 0)) for inv in investments)
+    revenue = sum(float(inv.get('rio', 0)) for inv in investments)
     realized_profit = sum(float(inv.get('current_profit', 0)) for inv in investments)
 
     return Response({
@@ -397,17 +402,17 @@ def founder_dashboard_overview(request, user_id):
 @api_view(['GET'])
 def investment_return_vs_comparison(request, user_id):
     projects = get_founder_projects(user_id)
-    project_ids = [p.get('id') for p in projects]
-    investments = get_investments_for_projects(project_ids)
+    project_id = [p.get('projectId') for p in projects]
+    investments = get_investments_for_projects(project_id)
 
     # Dummy example grouped by month name
     investment_return = defaultdict(float)
     comparison_data = defaultdict(float)
 
     for inv in investments:
-        month = inv.get('month', 'Unknown')  # Assume you store month in investment
-        investment_return[month] += float(inv.get('return', 0))
-        comparison_data[month] += float(inv.get('comparison_value', 0))
+        month = inv.get('invested_at', 'january')  # Assume you store month in investment
+        investment_return[month] += float(inv.get('roi', 30))
+        comparison_data[month] += float(inv.get('comparison_value', 50))
 
     return Response({
         "investment_return": dict(investment_return),
@@ -418,13 +423,13 @@ def investment_return_vs_comparison(request, user_id):
 @api_view(['GET'])
 def portfolio_performance(request, user_id):
     projects = get_founder_projects(user_id)
-    project_ids = [p.get('id') for p in projects]
-    investments = get_investments_for_projects(project_ids)
+    project_id = [p.get('id') for p in projects]
+    investments = get_investments_for_projects(project_id)
 
     performance = defaultdict(float)
     for inv in investments:
-        year = str(inv.get('year', 'Unknown'))
-        performance[year] += float(inv.get('portfolio_value', 0))
+        year = str(inv.get('year', 'january'))
+        performance[year] += float(inv.get('portfolio_value', 50))
 
     return Response(performance)
 
@@ -447,6 +452,26 @@ def profit_margin_trend(request, user_id):
 
     average_margins = {y: round(margins[y] / counts[y], 2) for y in margins if counts[y] > 0}
     return Response(average_margins)
+
+
+@api_view(['GET'])
+def monthly_finance_firebase_view(request):
+    ref = db.reference('monthly_finance')
+    data = ref.get()
+
+    formatted_data = []
+    for month, values in data.items():
+        formatted_data.append({
+            "month": month.capitalize(),
+            "revenue": values.get("revenue", 0),
+            "loss": values.get("loss", 0)
+        })
+
+    month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    formatted_data.sort(key=lambda x: month_order.index(x["month"]))
+
+    return Response(formatted_data)
 
 
 class TransactionsAPI(APIView):
@@ -516,21 +541,99 @@ class TransactionsAPI(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-  
  
-@api_view(['POST'])
-def add_product(request):
-    try:
-        data = request.data
-        ref = db.reference('products')
-        ref.push({
-            "product_name": data.get("product_name"),
-            "price": data.get("price"),
-            "roi": data.get("roi"),
-            "available_qty": data.get("available_qty"),
-            "sold_qty": data.get("sold_qty")
-        })
-        return Response({"status": "success", "message": "Product added successfully"})
-    except Exception as e:
-        return Response({"status": "error", "message": str(e)}, status=500)
 
+class ProductsAPI(APIView):
+    def get(self, request):
+        try:
+            ref = db.reference('products')
+            data = ref.get()
+            products = []
+
+            if data:
+                for key, item in data.items():
+                    item["id"] = key
+                    products.append(item)
+
+            return Response(products, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request):
+        try:
+            data = request.data
+            ref = db.reference('products')
+            new_product_ref = ref.push(data)
+            product_id = new_product_ref.key
+
+            return Response({
+                "message": "product added succesfully",
+                "product_id": product_id
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request):
+        try:
+            data = request.data
+            product_id = data.get("id")
+            if not product_id:
+                return Response({"error": "يجب إرسال id"}, status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference(f'products/{product_id}')
+            ref.update(data)
+
+            return Response({"message": "تم التعديل بنجاح"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request):
+        try:
+            data = request.data
+            product_id = data.get("id")
+            if not product_id:
+                return Response({"error": "يجب إرسال id"}, status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference(f'products/{product_id}')
+            ref.delete()
+
+            return Response({"message": "تم الحذف بنجاح"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def investor_manager(request, user_id):
+    # Step 1: Get all projects owned by this founder
+    projects_ref = db.reference("projects")
+    all_projects = projects_ref.get()
+
+    # Find project IDs owned by this user
+    founder_project_ids = [pid for pid, pdata in all_projects.items() if pdata.get("founder_id") == user_id]
+
+    # Step 2: Get all invested_projects and filter by project_id
+    inv_ref = db.reference("invested_projects")
+    all_investments = inv_ref.get()
+
+    investors_data = []
+
+    if all_investments:
+        for inv_id, inv in all_investments.items():
+            if inv.get("project_id") in founder_project_ids:
+                investor_id = inv.get("user_id")
+                user_ref = db.reference(f"users/{investor_id}")
+                user_data = user_ref.get()
+
+                investors_data.append({
+                    "username": user_data.get("username", "Unknown"),
+                    "amount_invested": inv.get("amount_invested"),
+                    "roi": inv.get("roi"),
+                    "date": inv.get("date"),
+                    "status": inv.get("status")
+                })
+
+    return Response({"investors": investors_data})

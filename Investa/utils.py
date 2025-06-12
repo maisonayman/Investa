@@ -9,6 +9,7 @@ from googleapiclient.http import MediaIoBaseUpload
 from firebase_admin import auth, db
 import uuid
 import os
+from rest_framework.decorators import api_view
 
 
 drive_service = build(
@@ -150,7 +151,7 @@ def upload_file_to_drive(uploaded_file, file_name):
 def send_password_reset_email_custom(email):
     try:
         action_code_settings = auth.ActionCodeSettings(
-            url="https://ff5d-37-19-208-83.ngrok-free.app/reset-password/",  # هنا حطي رابط الفرونت أو flutter لو mobile
+            url="https://1ae0-102-190-139-157.ngrok-free.app/reset-password/",  # هنا حطي رابط الفرونت أو flutter لو mobile
             handle_code_in_app=True
         )
 
@@ -188,17 +189,17 @@ def get_or_create_drive_folder(folder_name, parent_folder_id):
         fields='id').execute()
         return folder.get('id')
 
-
+@api_view(['GET'])
 def get_founder_projects(user_id):
     projects_ref = db.reference('projects')
     projects = projects_ref.get() or {}
-    return [p for p in projects.values() if p.get('owner_id') == user_id]
+    return [p for p in projects.values() if p.get('user_id') == user_id]
 
 
-def get_investments_for_projects(project_ids):
-    investments_ref = db.reference('investments')
+def get_investments_for_projects(project_id):
+    investments_ref = db.reference('invested_projects')
     investments = investments_ref.get() or {}
-    return [inv for inv in investments.values() if inv.get('project_id') in project_ids]
+    return [inv for inv in investments.values() if inv.get('project_id') in project_id]
 
 
 def get_user_data(user_id):

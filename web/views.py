@@ -3,28 +3,9 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from firebase_admin import db
 from rest_framework import status
-
-
-
-@api_view(['GET'])
-def monthly_finance_firebase_view(request):
-    ref = db.reference('monthly_finance')
-    data = ref.get()
-
-    formatted_data = []
-    for month, values in data.items():
-        formatted_data.append({
-            "month": month.capitalize(),
-            "revenue": values.get("revenue", 0),
-            "loss": values.get("loss", 0)
-        })
-
-    month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    formatted_data.sort(key=lambda x: month_order.index(x["month"]))
-
-    return Response(formatted_data)
-
+from datetime import datetime
+from collections import defaultdict
+import calendar
 
 @api_view(['POST'])
 def add_monthly_finance(request):
@@ -105,3 +86,42 @@ def get_investment_distribution(request, user_id):
         })
 
     return Response(distribution)
+
+
+@api_view(['GET'])
+def portfolio_vs_comparison(request, user_id):
+    projects_ref = db.reference('projects')
+    all_projects = projects_ref.get() or {}
+
+    founder_project_ids = [
+        pid for pid, proj in all_projects.items()
+        if proj.get('user_id', '').strip() == user_id.strip()
+    ]
+
+    invested_ref = db.reference('invested_projects')
+    investments = invested_ref.get() or {}
+
+    performance = defaultdict(float)
+    comparison = defaultdict(float)
+
+    for inv in investments.values():
+        if inv.get('project_id') in founder_project_ids:
+            date_str = inv.get("invested_at", "")
+            try:
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                month_label = date_obj.strftime('%b')  # e.g. 'Jun'
+            except:
+                continue
+
+            performance[month_label] += float(inv.get('roi', 0))
+            comparison[month_label] += 5  # or any logic
+
+    sorted_months = sorted(performance.keys(), key=lambda m: datetime.strptime(m, "%b").month)
+    performance_data = [performance[m] for m in sorted_months]
+    comparison_data = [comparison[m] for m in sorted_months]
+
+    return Response({
+        "dates": sorted_months,
+        "portfolio_performance": performance_data,
+        "comparison_data": comparison_data
+    })
