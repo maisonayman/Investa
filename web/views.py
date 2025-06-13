@@ -8,25 +8,27 @@ from collections import defaultdict
 import calendar
 from Investa.utils import get_founder_projects
 
+
 @api_view(['POST'])
 def add_monthly_finance(request):
     data = request.data
+    user_id = data.get('user_id')
     month = data.get('month')
     revenue = data.get('revenue')
     loss = data.get('loss')
 
-    if not all([month, revenue is not None, loss is not None]):
+    if not all([user_id, month, revenue is not None, loss is not None]):
         return Response({"error": "Missing fields"}, status=status.HTTP_400_BAD_REQUEST)
 
     month = month.capitalize()
 
-    ref = db.reference(f'monthly_finance/{month}')
+    ref = db.reference(f'users/{user_id}/monthly_finance/{month}')
     ref.set({
         'revenue': revenue,
         'loss': loss
     })
 
-    return Response({"message": f"{month} data saved successfully"}, status=status.HTTP_201_CREATED)
+    return Response({"message": f"{month} data saved successfully for user {user_id}"}, status=status.HTTP_201_CREATED)
 
 
 # 2. Get Investment Growth (line chart)

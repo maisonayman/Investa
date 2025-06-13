@@ -630,23 +630,25 @@ def profit_margin_trend(request, user_id):
 
 
 @api_view(['GET'])
-def monthly_finance(request):
-    ref = db.reference('monthly_finance')
+def monthly_finance(request, user_id):
+    ref = db.reference(f'users/{user_id}/monthly_finance')
     data = ref.get()
 
     formatted_data = []
-    for month, values in data.items():
-        formatted_data.append({
-            "month": month.capitalize(),
-            "revenue": values.get("revenue", 0),
-            "loss": values.get("loss", 0)
-        })
+    if data:
+        for month, values in data.items():
+            formatted_data.append({
+                "month": month.capitalize(),
+                "revenue": values.get("revenue", 0),
+                "loss": values.get("loss", 0)
+            })
 
-    month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    formatted_data.sort(key=lambda x: month_order.index(x["month"]))
+        month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        formatted_data.sort(key=lambda x: month_order.index(x["month"]))
 
     return Response(formatted_data)
+
 
 class TransactionsAPI(APIView):
     def get(self, request, user_id):

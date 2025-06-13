@@ -504,9 +504,14 @@ def get_category_percentages(request):
     # Return the calculated percentages as JSON response
     return JsonResponse(percentages)
 
-
 @api_view(['GET'])
 def get_dashboard_summary(request, user_id):
+    def safe_float(value):
+        try:
+            return float(str(value).replace('%', '').strip())
+        except:
+            return 0.0
+
     invested_ref = db.reference('invested_projects')
     project_ref = db.reference('projects')
     data = invested_ref.get() or {}
@@ -518,8 +523,8 @@ def get_dashboard_summary(request, user_id):
 
     for key, record in data.items():
         if record.get('user_id') == user_id:
-            amount = float(record.get('invested_amount', 0))
-            profit = float(record.get('current_profit', 0))
+            amount = safe_float(record.get('invested_amount', 0))
+            profit = safe_float(record.get('current_profit', 0))
             investment_type = record.get('investment_type', '')
             project_id = record.get('project_id', '')
 
@@ -527,7 +532,6 @@ def get_dashboard_summary(request, user_id):
                 continue
 
             if project_id not in project_totals:
-                # Get project name once
                 project_data = project_ref.child(project_id).get()
                 project_name = project_data.get('projectName', '') if project_data else 'Unknown Project'
 
@@ -1663,14 +1667,18 @@ def total_investments(request, user_id):
 
         results = []
 
-        for project_id, inv_data in user_investments.items():
-            invested_at = inv_data.get('invested_at', 0)
+        for inv_id, inv_data in user_investments.items():
+            project_id = inv_data.get('project_id')
+            if not project_id:
+                continue
+
             project_name = all_projects.get(project_id, {}).get('projectName', 'Unknown Project')
+            invested_at = inv_data.get('invested_at', '')
 
             results.append({
                 'project_id': project_id,
                 'project_name': project_name,
-                'start_date': invested_at,
+                'start_date': invested_at.split(' ')[0],  # remove time if you want
             })
 
         return JsonResponse(results, safe=False, status=200)
@@ -1678,7 +1686,7 @@ def total_investments(request, user_id):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-
+'''
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_revenue_growth(request, project_id):
@@ -1752,7 +1760,7 @@ def get_revenue_growth(request, project_id):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+'''
 
 @api_view(['POST'])
 @permission_classes([AllowAny])

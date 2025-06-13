@@ -96,8 +96,6 @@ from investor.views import (
     update_financial_report,
     delete_financial_report,
     user_investment_project_details,
-    get_revenue_growth,
-    create_revenue_entry
 )
 
 from web.views import (
@@ -165,7 +163,7 @@ urlpatterns = [
     path('paymob-callback/', paymob_callback, name='paymob_callback'),
     path('search/', search_projects, name='search'),
     path('add-invested-project/', add_invested_project, name='add_invested_project'),
-    path('total-investments/<str:user_id>/', total_investments, name='add_invested_project'),
+    path('dashboard/total-investments/<str:user_id>/', total_investments, name='add_invested_project'),
     path('dashboard/invested-projects/<str:user_id>/', get_user_invested_projects, name='get_user_invested_project'),
     path('dashboard/roi-vs-saving/<str:user_id>/', roi_vs_saving, name="roi_vs_saving"),
     path('dashboard/balance-history/<str:user_id>/', balance_history, name="balance_history"),
@@ -198,7 +196,7 @@ urlpatterns = [
     path('founder/dashboard/return-vs-comparison/<str:user_id>/', investment_return_vs_comparison, name='investment_return_vs_comparison'), # flutter, web
     path('founder/dashboard/portfolio-performance/<str:user_id>/', portfolio_performance, name='portfolio_performance'), # flutter only 
     path('founder/dashboard/profit-margin-trend/<str:user_id>/', profit_margin_trend, name='profit_margin_trend'), # flutter, web
-    path('founder/dashboard/monthly-finance/', monthly_finance, name='monthly-finance'),
+    path('founder/dashboard/monthly-finance/<str:user_id>/', monthly_finance, name='monthly-finance'),
     path('founder/dashboard/investor-manager/<str:user_id>/', investor_manager, name='investor_manager'),
     path('founder/dashboard/revenue-growth/<str:user_id>/', get_revenue_growth, name='get_revenue_growth'),
     path('founder/dashboard/revenue-entries/create/', add_revenue_entry, name='add_revenue_entry'),
@@ -207,6 +205,7 @@ urlpatterns = [
     #path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
     path('web/founder/dashboard/portfolio-vs-comparison/<str:user_id>/', portfolio_vs_comparison, name='portfolio_vs_comparison'),
     path('web/founder/investor-managment/<str:user_id>/', investor_management, name='investor_management'),
+    path('add_monthly_finance/', add_monthly_finance, name='add_monthly_finance'),
 
     
     # Swagger documentation
