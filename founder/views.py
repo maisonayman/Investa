@@ -521,13 +521,27 @@ def investment_return_vs_comparison(request, user_id):
 
     # ترتيب حسب الشهر
     all_data.sort(key=lambda x: datetime.strptime(x["month"], "%b").month)
+    investment_return = defaultdict(float)
+    comparison_data = defaultdict(float)
+
+    for inv in investments:
+        try:
+            invested_date = datetime.strptime(inv.get('invested_at'), "%Y-%m-%d")
+            month = invested_date.strftime('%b')
+        except Exception:
+            month = "Jan"
+
+        roi = float(inv.get('roi', 30))
+        investment_return[month] += roi
+
+        # 👇 هنا بنحسب قيمة المقارنة كمثال: 90% من ROI الفعلي
+        comparison_data[month] += roi * 0.9
 
     return Response({
         "dates": [entry["month"] for entry in all_data],
         "investment_return": [entry["roi"] for entry in all_data],
         "comparison_data": [entry["comparison"] for entry in all_data]
     })
-
 
 
 @api_view(['GET'])
@@ -574,8 +588,8 @@ def portfolio_performance(request, user_id):
         import traceback
         traceback.print_exc()
         return JsonResponse({'error': f'An internal server error occurred: {e}'}, status=500)
-
-
+    
+    
 @api_view(['GET'])
 def profit_margin_trend(request, user_id):
     projects = get_founder_projects(user_id)

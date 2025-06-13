@@ -95,7 +95,9 @@ from investor.views import (
     create_financial_report,
     update_financial_report,
     delete_financial_report,
-    user_investment_project_details
+    user_investment_project_details,
+    get_revenue_growth,
+    create_revenue_entry
 )
 
 from web.views import (
@@ -165,13 +167,12 @@ urlpatterns = [
     path('add-invested-project/', add_invested_project, name='add_invested_project'),
     path('total-investments/<str:user_id>/', total_investments, name='add_invested_project'),
     path('dashboard/invested-projects/<str:user_id>/', get_user_invested_projects, name='get_user_invested_project'),
-    path('roi-vs-saving/<str:user_id>/', roi_vs_saving, name="roi_vs_saving"),
-    path('balance-history/<str:user_id>/', balance_history, name="balance_history"),
-    path('dashboard/<str:user_id>/growth/', get_investment_growth, name='get_investment_growth'),
-    path('dashboard/<str:user_id>/investments/',get_my_investments, name='get_my_investments'),
-    path('dashboard/<str:user_id>/distribution/', get_investment_distribution, name='get_investment_distribution'),
+    path('dashboard/roi-vs-saving/<str:user_id>/', roi_vs_saving, name="roi_vs_saving"),
+    path('dashboard/balance-history/<str:user_id>/', balance_history, name="balance_history"),
+    path('dashboard/growth/<str:user_id>/', get_investment_growth, name='get_investment_growth'),
+    path('dashboard/investments/<str:user_id>/',get_my_investments, name='get_my_investments'),
+    path('dashboard/distribution/<str:user_id>/', get_investment_distribution, name='get_investment_distribution'),
     path('invested-projects/<str:user_id>/<str:investments_id>/', user_investment_project_details, name='get_investment_distribution'),
-    #path('get_project', get_project, name='get_project'),
     path('reports/<str:project_id>/', get_reports, name='get_reports'),
     path('reports/create/', create_report, name='create_report'),
     path('reports/<str:report_id>/update/', update_report, name='update_report'),
@@ -216,5 +217,6 @@ urlpatterns = [
     
     path('healthz', health_check),
     
+
     ]
 
