@@ -221,6 +221,7 @@ def get_investments_for_projects(project_ids_list): # Renamed parameter for clar
             found_investments.append(inv)
     return found_investments
 
+
 def get_user_data(user_id):
     ref = db.reference(f'users/{user_id}')
     return ref.get()
