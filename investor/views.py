@@ -35,6 +35,7 @@ def interests(request):
         return JsonResponse({'status': 'success'}, status=200)
 
     except Exception as e:
+        print(f"Error in interests API: {e}") # Added for debugging
         return JsonResponse({'error': str(e)}, status=500)
 
 
@@ -74,31 +75,85 @@ def get_user_interest_projects(request, user_id):
         if not user_data:
             return JsonResponse({'error': 'User not found'}, status=404)
 
-        # قراءة الاهتمامات وتحويلها لـ lowercase
         interests = user_data.get('interests', [])
         interests = [i.lower() for i in interests if isinstance(i, str)]
 
-        print("User Interests:", interests)
-
         projects_ref = db.reference('projects')
-        all_projects = projects_ref.get()
+        all_projects_dict = projects_ref.get() # Renamed for clarity, it's a dict of projects
 
-        if not all_projects:
+        if not all_projects_dict:
             return JsonResponse([], safe=False)
 
-        # مطابقة المشاريع حسب الاهتمامات
-        matching_projects = [
-            project for project in all_projects.values()
-            if project.get('projectCategory', '').lower() in interests
-        ]
+        # Retrieve all invested projects data
+        invested_projects_ref = db.reference('invested_projects')
+        # This will be a dictionary where keys are Firebase push IDs (like -OS-XcKYZJK-EcDOdGy0)
+        # and values are the investment records.
+        all_invested_records = invested_projects_ref.get()
 
-        print(f"Matching projects for user {user_id}:", matching_projects)
+        # If there are no invested projects, set it to an empty dict for safe iteration
+        if not all_invested_records:
+            all_invested_records = {}
 
-        return JsonResponse(matching_projects, safe=False)
+        # Pre-process invested projects to easily look up total invested amount and investor count per project_id
+        # We need to sum up invested_amount and count unique investors for each project
+        project_investment_summary = {}
+
+        # Iterate through all individual investment records
+        for record_id, record_data in all_invested_records.items():
+            invested_project_id = record_data.get('project_id')
+            invested_amount_str = record_data.get('invested_amount', '0') # It's a string in your DB
+            investor_user_id = record_data.get('user_id') # Get user_id for counting unique investors
+
+            if invested_project_id:
+                # Initialize summary for this project if it doesn't exist
+                if invested_project_id not in project_investment_summary:
+                    project_investment_summary[invested_project_id] = {
+                        'totalInvestedAmount': 0,
+                        'uniqueInvestorCount': set() # Use a set to count unique user_ids
+                    }
+
+                try:
+                    # Convert invested_amount to int/float for summation
+                    invested_amount = int(invested_amount_str) # Or float(invested_amount_str) if it can be decimal
+                except ValueError:
+                    invested_amount = 0 # Handle cases where it's not a valid number
+
+                project_investment_summary[invested_project_id]['totalInvestedAmount'] += invested_amount
+                
+                if investor_user_id:
+                    project_investment_summary[invested_project_id]['uniqueInvestorCount'].add(investor_user_id)
+
+
+        matching_projects_output = []
+
+        # Iterate through all actual projects to find matches and enrich data
+        # We are iterating all_projects_dict.items() to get both the project_key (ID) and its data
+        for project_key, project_data in all_projects_dict.items():
+            project_category = project_data.get('projectCategory', '')
+
+            if isinstance(project_category, str) and project_category.lower() in interests:
+                # Extract only the desired fields from the project
+                filtered_project = {
+                    'project_id': project_key, # Use the actual project key/ID
+                    'projectName': project_data.get('projectName'),
+                    'picture': project_data.get('projectLogoUrl'), # Corrected based on your screenshot
+                    'briefdescription': project_data.get('briefDescription'),
+                }
+
+                # Get investment summary for this specific project
+                summary = project_investment_summary.get(project_key, {})
+
+                filtered_project['investedAmount'] = summary.get('totalInvestedAmount', 0)
+                # The count of unique investors is the size of the set
+                filtered_project['investorCount'] = len(summary.get('uniqueInvestorCount', set()))
+
+                matching_projects_output.append(filtered_project)
+
+        return JsonResponse(matching_projects_output, safe=False)
 
     except Exception as e:
+        print(f"Error in get_user_interest_projects API: {e}")
         return JsonResponse({"error": str(e)}, status=500)
-
 
 
 @api_view(['GET'])

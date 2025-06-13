@@ -189,18 +189,37 @@ def get_or_create_drive_folder(folder_name, parent_folder_id):
         fields='id').execute()
         return folder.get('id')
 
-@api_view(['GET'])
+
 def get_founder_projects(user_id):
     projects_ref = db.reference('projects')
-    projects = projects_ref.get() or {}
-    return [p for p in projects.values() if p.get('user_id') == user_id]
+    all_projects = projects_ref.get() or {} # Use a more descriptive name
+
+    founder_projects_list = []
+    # Iterate through items to get both the Firebase key (project_id) and the project data
+    for project_id, project_data in all_projects.items():
+        if project_data.get('user_id', '').strip() == user_id.strip():
+            # Create a new dictionary that includes the Firebase key as 'project_id'
+            # This makes it consistent with how you want to use it later
+            project_data['project_id'] = project_id
+            founder_projects_list.append(project_data)
+    return founder_projects_list
 
 
-def get_investments_for_projects(project_id):
+def get_investments_for_projects(project_ids_list): # Renamed parameter for clarity
     investments_ref = db.reference('invested_projects')
-    investments = investments_ref.get() or {}
-    return [inv for inv in investments.values() if inv.get('project_id') in project_id]
+    all_investments_records = investments_ref.get() or {} # Use a more descriptive name
 
+    # Convert the dictionary of records to a list of records for easier filtering
+    # all_investments_records is like: {'-OS-XcKYZJK-...': { ... investment data ... }}
+    # We want to iterate over the values (the investment data dictionaries)
+    investments_values = all_investments_records.values()
+
+    found_investments = []
+    for inv in investments_values:
+        # Check if the 'project_id' in the investment record is in the provided list of project_ids
+        if inv.get('project_id') in project_ids_list:
+            found_investments.append(inv)
+    return found_investments
 
 def get_user_data(user_id):
     ref = db.reference(f'users/{user_id}')

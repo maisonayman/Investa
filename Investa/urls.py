@@ -45,7 +45,7 @@ from user.views import (
 # Founder app views
 from founder.views import (
     insert_project,
-    monthly_finance_firebase_view, 
+    monthly_finance, 
     insert_business_details,
     TransactionsAPI,
     create_project, 
@@ -57,6 +57,8 @@ from founder.views import (
     profit_margin_trend,
     ProductsAPI,
     investor_manager,
+    get_revenue_growth,
+    add_revenue_entry
     
 
     )
@@ -101,7 +103,8 @@ from web.views import (
     get_investment_growth,
     get_my_investments,
     get_investment_distribution,
-    portfolio_vs_comparison
+    portfolio_vs_comparison,
+    investor_management
 )
 
 from .utils import get_founder_projects
@@ -147,7 +150,7 @@ urlpatterns = [
     path('interests/', interests, name='interests'),
     #path('get_other_projects/', get_other_projects, name='get_other_projects'),
     path('welcome/<str:user_id>/', investor_profile, name='welcome'),
-    path('interest-projects/<str:user_id/', get_user_interest_projects, name='get_user_interest_projects'),
+    path('interest-projects/<str:user_id>/', get_user_interest_projects, name='get_user_interest_projects'),
     path('closing-soon/', closing_soon_projects, name='closing_soon_projects'),
     path('top-raised/', top_raised_projects, name='top_raised_projects'),
     path('trending/', trending_this_month, name='trending_this_month'),
@@ -186,21 +189,24 @@ urlpatterns = [
     path('insert-project/', insert_project, name='insert_project'),
     path('insert-business-details/', insert_business_details, name='insert_business_details'),
     path('create-project/', create_project, name='create_project'),
-    path('transactions/', TransactionsAPI.as_view(), name="transactions_api"),
+    path('founder/transactions/<str:user_id>/', TransactionsAPI.as_view(), name="transactions_api"),
     path('products/', ProductsAPI.as_view(), name="add_product"),
     path('email/', send_phase3_email, name='email'),
     path('founder-home/<str:project_id>', founder_home, name='founder_home'),
-    path('founder/dashboard/overview/<str:user_id>/', founder_dashboard_overview, name='founder_dashboard_overview'),
-    path('founder/dashboard/return-vs-comparison/<str:user_id>/', investment_return_vs_comparison, name='investment_return_vs_comparison'),
-    path('founder/dashboard/portfolio-performance/<str:user_id>/', portfolio_performance, name='portfolio_performance'),
-    path('founder/dashboard/profit-margin-trend/<str:user_id>/', profit_margin_trend, name='profit_margin_trend'),
-    path('founder/dashboard/monthly-finance/', monthly_finance_firebase_view, name='monthly-finance'),
-    path('investor-manager/<str:user_id>/', investor_manager, name='investor_manager'),
+    path('founder/dashboard/overview/<str:user_id>/', founder_dashboard_overview, name='founder_dashboard_overview'), # flutter, web
+    path('founder/dashboard/return-vs-comparison/<str:user_id>/', investment_return_vs_comparison, name='investment_return_vs_comparison'), # flutter, web
+    path('founder/dashboard/portfolio-performance/<str:user_id>/', portfolio_performance, name='portfolio_performance'), # flutter only 
+    path('founder/dashboard/profit-margin-trend/<str:user_id>/', profit_margin_trend, name='profit_margin_trend'), # flutter, web
+    path('founder/dashboard/monthly-finance/', monthly_finance, name='monthly-finance'),
+    path('founder/dashboard/investor-manager/<str:user_id>/', investor_manager, name='investor_manager'),
+    path('founder/dashboard/revenue-growth/<str:user_id>/', get_revenue_growth, name='get_revenue_growth'),
+    path('founder/dashboard/revenue-entries/create/', add_revenue_entry, name='add_revenue_entry'),
 
     # Web endpoints
     #path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
-    path('portfolio-vs-comparison/<str:user_id>/', portfolio_vs_comparison, name='portfolio_vs_comparison'),
-    path('get-founder-projects/<str:user_id>/', get_founder_projects, name='get_founder_projects'),
+    path('web/founder/dashboard/portfolio-vs-comparison/<str:user_id>/', portfolio_vs_comparison, name='portfolio_vs_comparison'),
+    path('web/founder/investor-managment/<str:user_id>/', investor_management, name='investor_management'),
+
     
     # Swagger documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
@@ -210,5 +216,5 @@ urlpatterns = [
     
     path('healthz', health_check),
     
-            ]
+    ]
 

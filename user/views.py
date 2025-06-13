@@ -123,7 +123,6 @@ def sign_in(request):
             return JsonResponse({"message": "Email and password are required."}, status=400)
 
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={settings.FIREBASE_WEB_API_KEY}"
-
         payload = {
             "email": email,
             "password": password,
@@ -144,6 +143,8 @@ def sign_in(request):
 
         user_id = result["localId"]
         id_token = result["idToken"]
+        refresh_token = result["refreshToken"]
+        email = result["email"]
 
         db_url = f"{settings.FIREBASE_DB_URL}/users/{user_id}.json?auth={id_token}"
         user_response = requests.get(db_url)
@@ -153,23 +154,86 @@ def sign_in(request):
             return JsonResponse({
                 "message": "Sign-in successful, but user details not found.",
                 "idToken": id_token,
-                "refreshToken": result["refreshToken"],
+                "refreshToken": refresh_token,
                 "user_id": user_id,
-                "email": result["email"]
+                "email": email
             })
 
-        return JsonResponse({
-            "message": "Sign-in successful",
-            "idToken": id_token,
-            "refreshToken": result["refreshToken"],
-            "user_id": user_id,
-            "email": result["email"],
-            "date_of_birth": user_data.get("date_of_birth"),
-            "username": user_data.get("username")
-        })
+        role = user_data.get("role")
+
+        if not role:
+            return JsonResponse({
+                "message": "Sign-in successful, but user has no role assigned.",
+                "user_id": user_id,
+                "email": email,
+                "idToken": id_token,
+                "refreshToken": refresh_token
+            })
+
+        if role == "investor":
+            interests = user_data.get("interests")
+            if interests:
+                return JsonResponse({
+                    "message": "Investor has interests.",
+                    "role": role,
+                    "user_id": user_id,
+                    "email": email,
+                    "interests": interests,
+                    "idToken": id_token,
+                    "refreshToken": refresh_token
+                })
+            else:
+                return JsonResponse({
+                    "message": "Investor has no interests yet.",
+                    "role": role,
+                    "user_id": user_id,
+                    "email": email,
+                    "idToken": id_token,
+                    "refreshToken": refresh_token
+                })
+
+        elif role == "founder":
+            projects_ref = db.reference('projects')
+            all_projects = projects_ref.get() or {}
+
+            has_project = any(
+                proj.get("user_id") == user_id for proj in all_projects.values()
+            )
+
+            if has_project:
+                return JsonResponse({
+                    "message": "Founder has project(s).",
+                    "role": role,
+                    "user_id": user_id,
+                    "email": email,
+                    "idToken": id_token,
+                    "refreshToken": refresh_token
+                })
+            else:
+                return JsonResponse({
+                    "message": "Founder has no projects yet.",
+                    "role": role,
+                    "user_id": user_id,
+                    "email": email,
+                    "idToken": id_token,
+                    "refreshToken": refresh_token
+                })
+
+        else:
+            return JsonResponse({
+                "message": f"User has unknown role: {role}",
+                "role": role,
+                "user_id": user_id,
+                "email": email,
+                "idToken": id_token,
+                "refreshToken": refresh_token
+            })
 
     except Exception as e:
-        return JsonResponse({"message": "An unexpected error occurred. Please try again."}, status=500)
+        return JsonResponse({
+            "message": f"An unexpected error occurred: {str(e)}"
+        }, status=500)
+
 
 
 class PersonalDataList(APIView):

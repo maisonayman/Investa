@@ -1,6 +1,6 @@
 from firebase_admin import db
 from rest_framework.response import Response
-from rest_framework.decorators import api_view, parser_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 import uuid
 from rest_framework.parsers import MultiPartParser, FormParser
 from Investa.utils import upload_image_to_drive, get_user_data, upload_file_to_drive, get_founder_projects, get_investments_for_projects
@@ -11,7 +11,8 @@ from django.template.loader import render_to_string
 from rest_framework.views import APIView
 from collections import defaultdict
 from datetime import datetime
-
+from django.http import JsonResponse
+from rest_framework.permissions import AllowAny
 
 
 @api_view(['POST'])
@@ -379,83 +380,243 @@ def get_project(request, project_id):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-# 1. Dashboard Overview API
 @api_view(['GET'])
 def founder_dashboard_overview(request, user_id):
-    projects = get_founder_projects(user_id)
-    project_ids = [p.get('project_id') for p in projects]
-    investments = get_investments_for_projects(project_ids)
+    try:
+        # Step 1: Get founder's projects
+        projects = get_founder_projects(user_id)
+        if not projects:
+            return Response({
+                "total_invested_amount": 0,
+                "number_of_investors": 0,
+                "revenue": 0,
+                "realized_profit": 0,
+                "message": "No projects found for this founder."
+            }, status=200)
 
-    total_invested = sum(float(inv.get('invested_amount', 0)) for inv in investments)
-    investor_ids = set(inv.get('user_id') for inv in investments)
-    revenue = sum(float(inv.get('rio', 0)) for inv in investments)
-    realized_profit = sum(float(inv.get('current_profit', 0)) for inv in investments)
+        # Extract project_ids from the list of project dictionaries
+        project_ids = [p.get('project_id') for p in projects if p.get('project_id')]
 
-    return Response({
-        "total_invested_amount": total_invested,
-        "number_of_investors": len(investor_ids),
-        "revenue": revenue,
-        "realized_profit": realized_profit
-    })
+        if not project_ids:
+            return Response({
+                "total_invested_amount": 0,
+                "number_of_investors": 0,
+                "revenue": 0,
+                "realized_profit": 0,
+                "message": "No valid project IDs found for this founder."
+            }, status=200)
+
+        # Step 2: Get investments related to these projects
+        investments = get_investments_for_projects(project_ids) # Pass the list of IDs
+        if not investments:
+            return Response({
+                "total_invested_amount": 0,
+                "number_of_investors": 0,
+                "revenue": 0,
+                "realized_profit": 0,
+                "message": "No investments found for the founder's projects."
+            }, status=200)
+
+        total_invested = 0
+        investor_ids = set()
+        total_roi = 0
+        total_realized_profit = 0
+
+        # Step 3: Process investments
+        for inv in investments:
+            # Handle invested_amount (string to float)
+            invested_amount_str = inv.get('invested_amount', '0')
+            try:
+                total_invested += float(invested_amount_str)
+            except ValueError:
+                print(f"Warning: Could not convert invested_amount '{invested_amount_str}' to float for investment {inv.get('project_id')}")
+
+            # Collect unique investor IDs
+            investor_user_id = inv.get('user_id')
+            if investor_user_id:
+                investor_ids.add(investor_user_id)
+
+            # Handle ROI (string to float) - assuming 'roi' is a number string like "100" (for 100%)
+            roi_str = inv.get('roi', '0')
+            try:
+                total_roi += float(roi_str)
+            except ValueError:
+                print(f"Warning: Could not convert roi '{roi_str}' to float for investment {inv.get('project_id')}")
+
+            # Handle current_profit ("30%") - needs parsing
+            current_profit_str = inv.get('current_profit', '0%')
+            if isinstance(current_profit_str, str) and '%' in current_profit_str:
+                current_profit_str = current_profit_str.replace('%', '') # Remove '%'
+            try:
+                profit_value = float(current_profit_str)
+                total_realized_profit += profit_value
+            except ValueError:
+                print(f"Warning: Could not convert current_profit '{current_profit_str}' to float for investment {inv.get('project_id')}")
+
+        return Response({
+            "total_invested_amount": total_invested,
+            "number_of_investors": len(investor_ids),
+            "revenue": total_roi,
+            "realized_profit": total_realized_profit
+        }, status=200)
+
+    except Exception as e:
+        import traceback
+        print(f"Error in founder_dashboard_overview API for user {user_id}: {e}")
+        traceback.print_exc() # Prints the full traceback to the console/logs
+        return JsonResponse({'error': f'An internal server error occurred: {e}'}, status=500)
 
 
 @api_view(['GET'])
 def investment_return_vs_comparison(request, user_id):
     projects = get_founder_projects(user_id)
-    project_id = [p.get('projectId') for p in projects]
-    investments = get_investments_for_projects(project_id)
+    project_ids = [p.get('project_id') for p in projects]
+    investments = get_investments_for_projects(project_ids)
 
-    # Dummy example grouped by month name
-    investment_return = defaultdict(float)
-    comparison_data = defaultdict(float)
+    month_counts = defaultdict(int)
+    month_data = defaultdict(lambda: {"roi": 0.0, "count": 0})
+
+    single_entries = []
 
     for inv in investments:
-        month = inv.get('invested_at', 'january')  # Assume you store month in investment
-        investment_return[month] += float(inv.get('roi', 30))
-        comparison_data[month] += float(inv.get('comparison_value', 50))
+        date_str = inv.get("invested_at", "")
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+        except:
+            try:
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            except:
+                continue
+
+        month_label = date_obj.strftime('%b')  # e.g. 'Jun'
+        roi = float(inv.get('roi', 0))
+        comparison = roi * 0.9  # مثال: المقارنة 90% من العائد
+
+        month_counts[month_label] += 1
+        month_data[month_label]["roi"] += roi
+        month_data[month_label]["count"] += 1
+
+        # لو الشهر ظهر مرة واحدة بس لحد دلوقتي → خزّنه كـ فردي
+        if month_data[month_label]["count"] == 1:
+            single_entries.append({
+                "month": month_label,
+                "roi": roi,
+                "comparison": comparison
+            })
+
+    # هنجمع الشهري اللي متكرر أكتر من مرة فقط
+    grouped_entries = []
+    for month, info in month_data.items():
+        if month_counts[month] > 1:
+            grouped_entries.append({
+                "month": month,
+                "roi": info["roi"],
+                "comparison": info["roi"] * 0.9  # المقارنة 90% من العائد المجمع
+            })
+
+    # النهائي: دمج البيانات الفردية مع المجمعه
+    all_data = grouped_entries + [
+        entry for entry in single_entries if month_counts[entry["month"]] == 1
+    ]
+
+    # ترتيب حسب الشهر
+    all_data.sort(key=lambda x: datetime.strptime(x["month"], "%b").month)
 
     return Response({
-        "investment_return": dict(investment_return),
-        "comparison_data": dict(comparison_data)
+        "dates": [entry["month"] for entry in all_data],
+        "investment_return": [entry["roi"] for entry in all_data],
+        "comparison_data": [entry["comparison"] for entry in all_data]
     })
+
 
 
 @api_view(['GET'])
 def portfolio_performance(request, user_id):
-    projects = get_founder_projects(user_id)
-    project_id = [p.get('id') for p in projects]
-    investments = get_investments_for_projects(project_id)
+    try:
+        projects = get_founder_projects(user_id)
+        project_ids_for_filter = [p.get('project_id') for p in projects if p.get('project_id')]
+        investments = get_investments_for_projects(project_ids_for_filter)
 
-    performance = defaultdict(float)
-    for inv in investments:
-        year = str(inv.get('year', 'january'))
-        performance[year] += float(inv.get('portfolio_value', 50))
+        performance = defaultdict(float)
 
-    return Response(performance)
+        for inv in investments:
+            invested_at_str = inv.get('invested_at')
+            month_abbr = 'unknown_month' # Default value if parsing fails
+
+            if invested_at_str and isinstance(invested_at_str, str):
+                try:
+                    # Parse the string to a datetime object
+                    dt_object = datetime.strptime(invested_at_str, "%Y-%m-%d %H:%M:%S")
+                    # Format to get the abbreviated month name (e.g., "Jan", "Feb")
+                    month_abbr = dt_object.strftime("%b")
+                except ValueError:
+                    # Handle cases where the date string is malformed
+                    print(f"Warning: Could not parse date from invested_at '{invested_at_str}' for investment {inv.get('project_id')}")
+                    month_abbr = 'invalid_date' # Or handle as per your requirement
+
+            current_portfolio_value = 0.0
+            invested_amount_str = inv.get('invested_amount', '0')
+            current_profit_str = inv.get('current_profit', '0%')
+
+            try: current_portfolio_value += float(invested_amount_str)
+            except ValueError: pass
+
+            if isinstance(current_profit_str, str) and '%' in current_profit_str:
+                current_profit_str = current_profit_str.replace('%', '')
+            try: current_portfolio_value += float(current_profit_str)
+            except ValueError: pass
+
+            performance[month_abbr] += current_portfolio_value
+
+        return Response(performance, status=200)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': f'An internal server error occurred: {e}'}, status=500)
 
 
 @api_view(['GET'])
 def profit_margin_trend(request, user_id):
     projects = get_founder_projects(user_id)
-    project_ids = [p.get('id') for p in projects]
+
+    project_ids = [p.get('project_id') for p in projects if p.get('project_id')]
     investments = get_investments_for_projects(project_ids)
 
     margins = defaultdict(float)
     counts = defaultdict(int)
 
     for inv in investments:
-        year = str(inv.get('year', 'Unknown'))
-        margin = inv.get('profit_margin')
-        if margin is not None:
-            margins[year] += float(margin)
-            counts[year] += 1
+        date_str = inv.get("invested_at", "")
+        roi = inv.get("roi")
 
-    average_margins = {y: round(margins[y] / counts[y], 2) for y in margins if counts[y] > 0}
-    return Response(average_margins)
+        if not roi:
+            continue
+
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+            month = date_obj.strftime('%b')  # e.g. 'Aug'
+        except:
+            month = "Unknown"
+
+        try:
+            roi_value = float(roi)
+            margins[month] += roi_value
+            counts[month] += 1
+        except:
+            continue
+
+    sorted_months = sorted(margins.keys(), key=lambda m: datetime.strptime(m, "%b").month if m != "Unknown" else 13)
+    average_margins = [round(margins[m] / counts[m], 2) for m in sorted_months]
+
+    return Response({
+        "dates": sorted_months,
+        "profit_margins": average_margins
+    })
 
 
 @api_view(['GET'])
-def monthly_finance_firebase_view(request):
+def monthly_finance(request):
     ref = db.reference('monthly_finance')
     data = ref.get()
 
@@ -473,10 +634,9 @@ def monthly_finance_firebase_view(request):
 
     return Response(formatted_data)
 
-
 class TransactionsAPI(APIView):
-    def get(self, request):
-        ref = db.reference('transactions')
+    def get(self, request, user_id):
+        ref = db.reference(f'transactions/{user_id}')
         data = ref.get()
         total_income = 0
         total_expenses = 0
@@ -503,16 +663,17 @@ class TransactionsAPI(APIView):
             "transactions": transactions
         }, status=status.HTTP_200_OK)
 
-    def put(self, request):
+    def post(self, request, user_id):
         try:
-            ref = db.reference('transactions')
             data = request.data
-            tx_id = data.get("id")
-            if not tx_id:
-                return Response({"error": "يجب إرسال id"}, status=status.HTTP_400_BAD_REQUEST)
+            required_fields = ['date', 'type', 'description', 'amount', 'payment_method', 'responsible']
 
-            tx_ref = ref.child(tx_id)
-            tx_ref.update({
+            missing = [field for field in required_fields if field not in data]
+            if missing:
+                return Response({"error": f"Missing fields: {', '.join(missing)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference(f'transactions/{user_id}')
+            new_tx = ref.push({
                 "date": data["date"],
                 "type": data["type"],
                 "description": data["description"],
@@ -521,26 +682,11 @@ class TransactionsAPI(APIView):
                 "responsible": data["responsible"]
             })
 
-            return Response({"message": "تم التعديل بنجاح"}, status=status.HTTP_200_OK)
+            return Response({"message": "success", "id": new_tx.key}, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    def delete(self, request):
-        try:
-            ref = db.reference('transactions')
-            data = request.data
-            tx_id = data.get("id")
-            if not tx_id:
-                return Response({"error": "يجب إرسال id"}, status=status.HTTP_400_BAD_REQUEST)
-
-            tx_ref = ref.child(tx_id)
-            tx_ref.delete()
-
-            return Response({"message": "تم الحذف بنجاح"}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
  
 
 class ProductsAPI(APIView):
@@ -606,34 +752,167 @@ class ProductsAPI(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+from collections import defaultdict
+from datetime import datetime
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+import firebase_admin
+from firebase_admin import db
+
 @api_view(['GET'])
 def investor_manager(request, user_id):
-    # Step 1: Get all projects owned by this founder
-    projects_ref = db.reference("projects")
-    all_projects = projects_ref.get()
+    founder_projects = get_founder_projects(user_id)
+    founder_project_ids = [proj.get("project_id") for proj in founder_projects]
 
-    # Find project IDs owned by this user
-    founder_project_ids = [pid for pid, pdata in all_projects.items() if pdata.get("founder_id") == user_id]
-
-    # Step 2: Get all invested_projects and filter by project_id
     inv_ref = db.reference("invested_projects")
     all_investments = inv_ref.get()
 
-    investors_data = []
+    investor_map = {}
 
     if all_investments:
         for inv_id, inv in all_investments.items():
             if inv.get("project_id") in founder_project_ids:
                 investor_id = inv.get("user_id")
                 user_ref = db.reference(f"users/{investor_id}")
-                user_data = user_ref.get()
+                user_data = user_ref.get() or {}
 
-                investors_data.append({
-                    "username": user_data.get("username", "Unknown"),
-                    "amount_invested": inv.get("amount_invested"),
-                    "roi": inv.get("roi"),
-                    "date": inv.get("date"),
-                    "status": inv.get("status")
-                })
+                username = user_data.get("username", "Unknown")
+                invested_amount = float(inv.get("invested_amount", 0))
+                roi = float(inv.get("roi", 0))
+                status = inv.get("status", "Unknown")
+                date_str = inv.get("invested_at", "")
+                try:
+                    date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").date()
+                except:
+                    date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else None
+
+                if investor_id in investor_map:
+                    investor_map[investor_id]["amount_invested"] += invested_amount
+                    investor_map[investor_id]["roi"] += roi
+                    # keep the latest date
+                    if date and date > investor_map[investor_id]["date"]:
+                        investor_map[investor_id]["date"] = date
+                else:
+                    investor_map[investor_id] = {
+                        "username": username,
+                        "amount_invested": invested_amount,
+                        "roi": roi,
+                        "date": date,
+                        "status": status
+                    }
+
+    # convert to list and format date
+    investors_data = []
+    for item in investor_map.values():
+        item["date"] = item["date"].isoformat() if item["date"] else ""
+        investors_data.append(item)
 
     return Response({"investors": investors_data})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_revenue_growth(request, user_id):
+    
+    try:
+        # هات مشاريع ال founder
+        projects = get_founder_projects(user_id)
+        if not projects:
+            return Response({"message": "No projects found", "revenues": [], "dates": []}, status=200)
+
+        all_revenue_entries = []
+        for project in projects:
+            project_id = project.get("project_id")
+            revenue_ref = db.reference(f'projects/{project_id}/revenue_entries')
+            entries = revenue_ref.get() or {}
+            for entry in entries.values():
+                all_revenue_entries.append(entry)
+
+        if not all_revenue_entries:
+            return Response({"message": "No revenue data found", "revenues": [], "dates": []}, status=200)
+
+        monthly_totals = defaultdict(float)
+
+        for entry in all_revenue_entries:
+            date_str = entry.get("date")
+            amount = float(entry.get("amount", 0))
+
+            if not date_str or amount == 0:
+                continue
+
+            try:
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                month_label = date_obj.strftime('%b')  # e.g., 'Jun'
+            except:
+                month_label = "Unknown"
+
+            monthly_totals[month_label] += amount
+
+        # Sort months in calendar order
+        sorted_months = sorted(
+            monthly_totals.keys(),
+            key=lambda m: datetime.strptime(m, "%b").month if m != "Unknown" else 13
+        )
+
+        revenue_values = [round(monthly_totals[m], 2) for m in sorted_months]
+
+        return Response({
+            "dates": sorted_months,
+            "revenues": revenue_values
+        }, status=200)
+
+    except Exception as e:
+        return Response({
+            "error": str(e),
+            "status": "error"
+        }, status=500)
+
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def add_revenue_entry(request):
+    try:
+        user_id = request.data.get('user_id')
+        amount = request.data.get('amount')
+        date = request.data.get('date')  # expected format: YYYY-MM-DD
+
+        if not user_id or not amount or not date:
+            return Response({
+                'error': 'user_id, amount, and date are required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # استخدم utility function لجلب مشاريع المستخدم
+        projects = get_founder_projects(user_id)
+        if not projects:
+            return Response({
+                'error': 'No project found for this user.'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # استخدم أول مشروع (لو في أكتر من مشروع ممكن نعدل لاحقًا)
+        project_id = projects[0]['project_id']
+
+        # Validate date format
+        try:
+            datetime.strptime(date, '%Y-%m-%d')
+        except ValueError:
+            return Response({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+
+        # Push revenue entry
+        revenue_ref = db.reference(f'projects/{project_id}/revenue_entries')
+        revenue_ref.push({
+            'amount': amount,
+            'date': date
+        })
+
+        return Response({
+            'message': 'Revenue entry added successfully.',
+            'project_id': project_id,
+            'status': 'success'
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'status': 'error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

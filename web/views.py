@@ -6,6 +6,7 @@ from rest_framework import status
 from datetime import datetime
 from collections import defaultdict
 import calendar
+from Investa.utils import get_founder_projects
 
 @api_view(['POST'])
 def add_monthly_finance(request):
@@ -109,12 +110,13 @@ def portfolio_vs_comparison(request, user_id):
             date_str = inv.get("invested_at", "")
             try:
                 date_obj = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-                month_label = date_obj.strftime('%b')  # e.g. 'Jun'
+                month_label = date_obj.strftime('%b')
             except:
                 continue
 
-            performance[month_label] += float(inv.get('roi', 0))
-            comparison[month_label] += 5  # or any logic
+            roi = float(inv.get('roi', 0))
+            performance[month_label] += roi
+            comparison[month_label] += roi * 0.9  # 👈 مقارنة تعتمد على ROI
 
     sorted_months = sorted(performance.keys(), key=lambda m: datetime.strptime(m, "%b").month)
     performance_data = [performance[m] for m in sorted_months]
@@ -125,3 +127,57 @@ def portfolio_vs_comparison(request, user_id):
         "portfolio_performance": performance_data,
         "comparison_data": comparison_data
     })
+
+
+@api_view(['GET'])
+def investor_management(request, user_id):
+    founder_projects = get_founder_projects(user_id)
+    founder_project_ids = [proj.get("project_id") for proj in founder_projects]
+
+    inv_ref = db.reference("invested_projects")
+    all_investments = inv_ref.get()
+
+    investors_map = {}
+
+    if all_investments:
+        for inv_id, inv in all_investments.items():
+            if inv.get("project_id") in founder_project_ids:
+                investor_id = inv.get("user_id")
+                user_ref = db.reference(f"users/{investor_id}")
+                user_data = user_ref.get() or {}
+
+                username = user_data.get("username", "Unknown")
+                email = user_data.get("email", "Unknown")
+
+                invested_amount = float(inv.get("invested_amount", 0))
+                roi = float(inv.get("roi", 0))
+                date_str = inv.get("invested_at", "")
+                status = inv.get("status", "Unknown")
+
+                # Format date to only include yyyy-mm-dd
+                try:
+                    date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").date()
+                except:
+                    date = date_str
+
+                key = f"{username}_{email}"  # to prevent duplicates
+
+                if key in investors_map:
+                    investors_map[key]["invested_amount"] += invested_amount
+                    investors_map[key]["roi"] += roi
+                    if date > investors_map[key]["invested_at"]:
+                        investors_map[key]["invested_at"] = date
+                    investors_map[key]["status"] = status
+                else:
+                    investors_map[key] = {
+                        "username": username,
+                        "email": email,
+                        "invested_amount": invested_amount,
+                        "roi": roi,
+                        "reinsurance": "N/A",  # Change if available
+                        "invested_at": date,
+                        "investor_share": "N/A",  # Add logic if you calculate it
+                        "status": status
+                    }
+
+    return Response({"investors": list(investors_map.values())})

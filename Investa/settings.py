@@ -24,7 +24,7 @@ import os
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-=9tj$u7ncfm(c1m+@lqp8#4=n8=$@-ho)_&4b7-gth7!!^r%ft')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
@@ -155,8 +155,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'maisonayman12@gmail.com'   # Replace with your Gmail
-EMAIL_HOST_PASSWORD = 'wpcz hcoz gutp dtys'  # Use an App Password for security
+EMAIL_HOST_USER = 'maisonayman12@gmail.com'   
+EMAIL_HOST_PASSWORD = 'wpcz hcoz gutp dtys'  
 
 
 # Paymob Settings
@@ -165,88 +165,59 @@ PAYMOB_IFRAME_ID = "926949"
 PAYMOB_INTEGRATION_ID = "5110028"
 
 
+
 # firebase settings
 
 import os
 import firebase_admin
 from firebase_admin import credentials, db
 from google.oauth2 import service_account
-'''
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Firebase setup
-FIREBASE_CREDENTIAL_PATH = '/etc/secrets/firebase_config.json'
-if os.path.exists(FIREBASE_CREDENTIAL_PATH):
-    cred = credentials.Certificate(FIREBASE_CREDENTIAL_PATH)
+
+# ----------------------------
+# ✅ Firebase Setup for Render
+# ----------------------------
+firebase_key_json = os.environ.get("FIREBASE_KEY_JSON")
+firebase_key_path = os.path.join(BASE_DIR, "firebase_temp_key.json")
+
+if firebase_key_json:
+    with open(firebase_key_path, "w") as f:
+        f.write(firebase_key_json)
+
+    cred = credentials.Certificate(firebase_key_path)
     firebase_admin.initialize_app(cred, {
         'databaseURL': os.environ.get("FIREBASE_DB_URL")
     })
 else:
-    raise Exception("Missing Firebase credential file")
+    raise Exception("FIREBASE_KEY_JSON not found!")
 
 FIREBASE_WEB_API_KEY = os.environ.get("FIREBASE_WEB_API_KEY")
 FIREBASE_REALTIME_DB = db.reference()
 
-# Google Drive credentials
-GOOGLE_DRIVE_CREDENTIAL_PATH = '/etc/secrets/investakey.json'
-if os.path.exists(GOOGLE_DRIVE_CREDENTIAL_PATH):
+# ----------------------------
+# ✅ Google Drive Setup for Render
+# ----------------------------
+google_drive_json = os.environ.get("GOOGLE_DRIVE_KEY_JSON")
+google_drive_key_path = os.path.join(BASE_DIR, "google_drive_temp_key.json")
+
+if google_drive_json:
+    with open(google_drive_key_path, "w") as f:
+        f.write(google_drive_json)
+
     GOOGLE_CREDENTIALS = service_account.Credentials.from_service_account_file(
-        GOOGLE_DRIVE_CREDENTIAL_PATH,
+        google_drive_key_path,
         scopes=["https://www.googleapis.com/auth/drive"]
     )
 else:
-    raise Exception("Missing Google Drive key file")
+    raise Exception("GOOGLE_DRIVE_KEY_JSON not found!")
 
+# CORS
+CORS_ALLOW_ALL_ORIGINS = True
 
+# Folder IDs
 FOLDER_ID_FOR_REELS = '1Datr67ecjoozkP5RcuP_NZHVGuhIgat5'
 FOLDER_ID_FOR_PROJECT_PIC = '1wk6wL-KxNPJ9u2XF9NUDRb0pnJ07LE_g'
 FOLDER_ID_FOR_PROFILE_PIC = '1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd'
 FOLDER_ID_FOR_PROJECT_VIDEO = '1KaJjwmqVy91vcW1vGg2HlDoKpvFMheYk'
 FOLDER_ID_FOR_FILES = '1gti3xxw3nuT2eQFrhsICNjbiNKAp3_4w'
-'''
 
-
-
-# firebase settings
-
-import os
-import firebase_admin
-from firebase_admin import credentials, db
-from google.oauth2 import service_account
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Path to Firebase JSON key file
-FIREBASE_CREDENTIALS_PATH = os.path.join(BASE_DIR, "firebase_config.json")
-
-# Initialize Firebase Admin SDK (No need for `apiKey`, `authDomain`, etc.)
-if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-    firebase_admin.initialize_app(cred, {
-        'databaseURL': 'https://investa812-default-rtdb.firebaseio.com/'  # Replace with your actual Realtime DB URL
-    })
-
-FIREBASE_WEB_API_KEY = "AIzaSyCGC3qzQIuPnR4xTzh2vOqahVNTunQX3QM"
-
-FIREBASE_DB_URL ="https://investa812-default-rtdb.firebaseio.com/"
-
-# Get Firebase Realtime Database Reference
-FIREBASE_REALTIME_DB = db.reference()
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Path to your service account key file
-GOOGLE_DRIVE_KEY_FILE = os.path.join(BASE_DIR, "investakey.json")
-
-# Load credentials
-GOOGLE_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    GOOGLE_DRIVE_KEY_FILE,
-    scopes=["https://www.googleapis.com/auth/drive"]
-)  
-
-
-FOLDER_ID_FOR_REELS='1Datr67ecjoozkP5RcuP_NZHVGuhIgat5'
-FOLDER_ID_FOR_PROJECT_PIC='1wk6wL-KxNPJ9u2XF9NUDRb0pnJ07LE_g'
-FOLDER_ID_FOR_PROFILE_PIC='1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd'
-FOLDER_ID_FOR_PROJECT_VIDEO='1KaJjwmqVy91vcW1vGg2HlDoKpvFMheYk'
-FOLDER_ID_FOR_FILES='1gti3xxw3nuT2eQFrhsICNjbiNKAp3_4w'    
