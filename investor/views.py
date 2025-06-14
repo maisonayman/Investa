@@ -704,7 +704,7 @@ def get_user_invested_projects(request, user_id):
 def roi_vs_saving(request, user_id):
 
     # Fetch user's monthly save value from Firebase
-    monthlysave_ref = db.reference(f'users/{user_id}/monthlysave')
+    monthlysave_ref = db.reference(f'users/{user_id}/monthlySave')
     monthlysave = monthlysave_ref.get()
 
     if not monthlysave:
@@ -733,9 +733,9 @@ def roi_vs_saving(request, user_id):
     })
 
 
+
 @api_view(['GET'])
 def balance_history(request, user_id):
-
     ref = db.reference(f'users/{user_id}/investments')
     investments = ref.get()
 
@@ -745,15 +745,17 @@ def balance_history(request, user_id):
     month_totals = defaultdict(float)
 
     for item in investments.values():
-        amount = float(item.get('amount', 0))
-        timestamp = item.get('timestamp')  # Format: '2025-01-12'
+        amount = float(item.get('invested_amount', 0))
+        timestamp = item.get('invested_at')
 
         if timestamp:
-            dt = datetime.datetime.strptime(timestamp, '%Y-%m-%d')
-            month_str = dt.strftime('%b')  # 'Jan', 'Feb', etc.
-            month_totals[month_str] += amount
+            try:
+                dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')  # ✅ صح كده
+                month_str = dt.strftime('%b')
+                month_totals[month_str] += amount
+            except Exception as e:
+                print("❌ Date parse error:", e)
 
-    # Sort by month order
     month_order = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan']
     result_months = []
     result_amounts = []
@@ -863,14 +865,14 @@ def user_investment_project_details(request, user_id):
         combined = {
             "project_name": project_data.get("projectName"),
             "category": project_data.get("projectCategory"),
-            "type": project_data.get("investment_type"),
-            "start_date": investment_data.get("projectStartDate"),
-            "end_of_cycle": project_data.get("end_of_cycle"),
+            "type": project_data.get("investmentType"),
+            "start_date": project_data.get("projectStartDate"),
+            "end_of_cycle": project_data.get("end_of_cycle" ),
             "amount_of_investment": investment_data.get("invested_amount"),
             "roi_expected": investment_data.get("roi"),
-            "expected_roi": project_data.get("roi"),
-            "total_return": project_data.get("total_return"),
-            "success_rate": project_data.get("success_rate"),
+            "expected_roi": investment_data.get("roi"),
+            "total_return": investment_data.get("roi"),
+            "success_rate": project_data.get("success_rate", 50),
             "reinsurance": investment_data.get("reinsurance"),
             "current_roi_rate": investment_data.get("roi"),
             "roi_q1": investment_data.get("roi"),
