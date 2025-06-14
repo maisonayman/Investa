@@ -127,7 +127,6 @@ urlpatterns = [
     path('personal-data/', PersonalDataList.as_view(), name='personal-data-list'),
     path('personal-data/<str:user_id>/', PersonalDataDetail.as_view(), name='personal-data-detail'),
     path('sign-in/', sign_in, name='sign_in'),
-    path('password-reset-link/', send_reset_link, name='password-reset-link'),
     path('upload-video/', upload_video, name='upload_video'),
     path('get-reels/', get_reels, name='get_reels'),
     path('send-reset-link/', send_reset_link, name='send_reset_link'),
