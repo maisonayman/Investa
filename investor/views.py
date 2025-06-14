@@ -831,19 +831,22 @@ def add_invested_project(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-
 @api_view(['GET'])
-def user_investment_project_details(request, user_id, investments_id):
+def user_investment_project_details(request, user_id):
     """
-    Get full investment + project info for a specific investment ID.
+    Get full investment + project info for the first investment of the user.
     """
     try:
-        # Get the specific investment
-        investment_ref = db.reference(f'users/{user_id}/investments/{investments_id}')
-        investment_data = investment_ref.get()
+        # Get all user investments
+        investments_ref = db.reference(f'users/{user_id}/investments')
+        all_investments = investments_ref.get()
 
-        if not investment_data:
-            return Response({"message": "Investment not found"}, status=404)
+        if not all_investments:
+            return Response({"message": "No investments found for this user"}, status=404)
+
+        # Take the first investment (or loop through all if you prefer)
+        investments_list = list(all_investments.items())  # [(investment_id, data), ...]
+        first_investment_id, investment_data = investments_list[0]
 
         project_id = investment_data.get('project_id')
         if not project_id:
@@ -873,6 +876,7 @@ def user_investment_project_details(request, user_id, investments_id):
             "roi_q1": investment_data.get("roi"),
             "roi_q2": investment_data.get("roi"),
             "current_roi": investment_data.get("roi"),
+            "investment_id": first_investment_id,
         }
 
         return Response(combined, status=200)
