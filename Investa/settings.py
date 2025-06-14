@@ -165,9 +165,15 @@ PAYMOB_IFRAME_ID = "926949"
 PAYMOB_INTEGRATION_ID = "5110028"
 
 
+
+
+import os
+import firebase_admin
+from firebase_admin import credentials, db
+from google.oauth2 import service_account
 # firebase settings
 
-'''
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Firebase setup
@@ -199,17 +205,13 @@ FOLDER_ID_FOR_PROJECT_PIC = '1wk6wL-KxNPJ9u2XF9NUDRb0pnJ07LE_g'
 FOLDER_ID_FOR_PROFILE_PIC = '1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd'
 FOLDER_ID_FOR_PROJECT_VIDEO = '1KaJjwmqVy91vcW1vGg2HlDoKpvFMheYk'
 FOLDER_ID_FOR_FILES = '1gti3xxw3nuT2eQFrhsICNjbiNKAp3_4w'
-'''
+
 
 
 
 # firebase settings
 
-import os
-import firebase_admin
-from firebase_admin import credentials, db
-from google.oauth2 import service_account
-
+'''
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Path to Firebase JSON key file
@@ -245,4 +247,4 @@ FOLDER_ID_FOR_REELS='1Datr67ecjoozkP5RcuP_NZHVGuhIgat5'
 FOLDER_ID_FOR_PROJECT_PIC='1wk6wL-KxNPJ9u2XF9NUDRb0pnJ07LE_g'
 FOLDER_ID_FOR_PROFILE_PIC='1fWzuK6MIqsKCVncaLYhV7wB6qfhDWBMd'
 FOLDER_ID_FOR_PROJECT_VIDEO='1KaJjwmqVy91vcW1vGg2HlDoKpvFMheYk'
-FOLDER_ID_FOR_FILES='1gti3xxw3nuT2eQFrhsICNjbiNKAp3_4w'    
+FOLDER_ID_FOR_FILES='1gti3xxw3nuT2eQFrhsICNjbiNKAp3_4w'    '''
