@@ -944,6 +944,21 @@ def add_revenue_entry(request):
 
 
 
+import os
+import pandas as pd
+import joblib
+from datetime import datetime
+from firebase_admin import db
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from dotenv import load_dotenv
+import requests
+from groq import Groq
+
+
+load_dotenv()
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
 
 def load_model_components():
     """Load the trained model and preprocessing components"""
@@ -1045,6 +1060,64 @@ def predict_investment_success(data_df, components):
     # Make prediction
     return components['model'].predict(data_processed)[0]
 
+def generate_investment_insights_with_groq(project_info, analysis_info, prediction_data, success_probability):
+    """Generate investment insights using Groq's LLM"""
+    
+    # Skip API call if no API key is configured
+    if not GROQ_API_KEY:
+        return ["LLM analysis unavailable - API key not configured"]
+    
+    try:
+        # Format project data into a readable summary for the LLM
+        project_summary = (
+            f"Project: {project_info.get('projectName', 'Unnamed Project')}\n"
+            f"Industry: {project_info.get('projectCategory', 'Other')}\n"
+            f"Business Model: {analysis_info.get('businessModel', 'B2C')}\n"
+            f"Funding Needed: ${prediction_data['funding_usd']:.2f} USD (${prediction_data['funding_egp']:.2f} EGP)\n"
+            f"Equity Offered: {prediction_data['equity_percentage']:.1f}%\n"
+            f"Team Size: {prediction_data['team_size']}\n"
+            f"Annual Revenue: ${prediction_data['revenue']:.2f}\n"
+            f"Net Profit: ${prediction_data['profit']:.2f}\n"
+            f"Profit Margin: {prediction_data['profit_margin']*100:.1f}%\n"
+            f"Revenue Growth: {prediction_data['revenue_growth']*100:.1f}%\n"
+            f"Customers: {prediction_data['customers']}\n"
+            f"Customer Growth Rate: {prediction_data['customer_growth']*100:.1f}%\n"
+            f"Churn Rate: {prediction_data['churn_rate']*100:.1f}%\n"
+            f"Operating Costs: ${prediction_data['operating_costs']:.2f}\n"
+            f"Debt to Profit Ratio: {prediction_data['debt_to_profit_ratio']:.2f}\n"
+            f"Predicted Success Probability: {success_probability*100:.1f}%\n"
+        )
+        
+        # Craft the prompt for the LLM
+        prompt = f"""You are an expert investment analyst. Based on the following project data, provide 3-5 key insights about this investment opportunity. Focus on strengths, weaknesses, risks, and opportunities. Be specific and concise.
+
+PROJECT DATA:
+{project_summary}
+
+FORMAT YOUR RESPONSE AS A SIMPLE LIST OF INSIGHTS."""
+
+        # Initialize Groq client
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        # Make the API call using the client
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "You are an expert investment analyst providing concise insights."},
+                {"role": "user", "content": prompt}
+            ],
+            model=GROQ_MODEL,
+            temperature=0.3,  # Lower temperature for more focused responses
+            max_tokens=500
+        )
+        
+        # Extract the insights from the response
+        llm_insights = chat_completion.choices[0].message.content.strip().split("\n")
+        # Clean up any bullet points or other formatting
+        llm_insights = [insight.strip().lstrip("•-* ") for insight in llm_insights if insight.strip()]
+        return llm_insights
+            
+    except Exception as e:
+        return [f"Error connecting to Groq API: {str(e)}"]
 
 @api_view(['GET'])
 def predict_investment(request, project_id):
@@ -1081,34 +1154,44 @@ def predict_investment(request, project_id):
             recommendation = "Recommended Investment"
             risk_emoji = "🟢"
         
-        # Prepare key insights based on data
-        key_insights = []
+        # Generate insights using Groq LLM
+        key_insights = generate_investment_insights_with_groq(
+            project_info, 
+            analysis_info, 
+            prediction_data, 
+            success_probability
+        )
         
-        # Revenue insights
-        revenue = prediction_data['revenue']
-        if revenue > 0:
-            if revenue > 1000000:
-                key_insights.append("Strong revenue performance")
-            elif revenue < 100000:
-                key_insights.append("Revenue is below market average")
-        
-        # Growth insights
-        if prediction_data['revenue_growth'] > 0.25:
-            key_insights.append("Excellent growth trajectory")
-        elif prediction_data['revenue_growth'] < 0.05:
-            key_insights.append("Growth rate is concerning")
-        
-        # Customer insights
-        if prediction_data['repeat_purchase_rate'] > 0.7:
-            key_insights.append("Strong customer retention")
-        elif prediction_data['churn_rate'] > 0.3:
-            key_insights.append("High churn rate is a risk factor")
-        
-        # Financial health
-        if prediction_data['profit_margin'] > 0.2:
-            key_insights.append("Healthy profit margins")
-        elif prediction_data['profit_margin'] < 0:
-            key_insights.append("Currently operating at a loss")
+        # If LLM insights aren't available, fall back to rule-based insights
+        if key_insights == ["LLM analysis unavailable - API key not configured"] or key_insights[0].startswith("Error"):
+            # Fallback to rule-based insights
+            key_insights = []
+            
+            # Revenue insights
+            revenue = prediction_data['revenue']
+            if revenue > 0:
+                if revenue > 1000000:
+                    key_insights.append("Strong revenue performance")
+                elif revenue < 100000:
+                    key_insights.append("Revenue is below market average")
+            
+            # Growth insights
+            if prediction_data['revenue_growth'] > 0.25:
+                key_insights.append("Excellent growth trajectory")
+            elif prediction_data['revenue_growth'] < 0.05:
+                key_insights.append("Growth rate is concerning")
+            
+            # Customer insights
+            if prediction_data['repeat_purchase_rate'] > 0.7:
+                key_insights.append("Strong customer retention")
+            elif prediction_data['churn_rate'] > 0.3:
+                key_insights.append("High churn rate is a risk factor")
+            
+            # Financial health
+            if prediction_data['profit_margin'] > 0.2:
+                key_insights.append("Healthy profit margins")
+            elif prediction_data['profit_margin'] < 0:
+                key_insights.append("Currently operating at a loss")
         
         # Return comprehensive response
         response_data = {
