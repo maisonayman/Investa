@@ -24,7 +24,7 @@ import os
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-=9tj$u7ncfm(c1m+@lqp8#4=n8=$@-ho)_&4b7-gth7!!^r%ft')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
@@ -167,10 +167,6 @@ PAYMOB_INTEGRATION_ID = "5110028"
 
 # firebase settings
 
-import os
-import firebase_admin
-from firebase_admin import credentials, db
-from google.oauth2 import service_account
 '''
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
