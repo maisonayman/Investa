@@ -1119,6 +1119,7 @@ FORMAT YOUR RESPONSE AS A SIMPLE LIST OF INSIGHTS."""
     except Exception as e:
         return [f"Error connecting to Groq API: {str(e)}"]
 
+
 @api_view(['GET'])
 def predict_investment(request, project_id):
     """API endpoint to get investment success prediction for a project"""
@@ -1192,26 +1193,44 @@ def predict_investment(request, project_id):
                 key_insights.append("Healthy profit margins")
             elif prediction_data['profit_margin'] < 0:
                 key_insights.append("Currently operating at a loss")
+                
+        # If we ended up with no insights, provide a default
+        if not key_insights:
+            key_insights = ["Insufficient data for detailed insights"]
         
-        # Return comprehensive response
+        # Return comprehensive response with JSON-safe values
         response_data = {
-            "project_id": project_id,
-            "project_name": project_info.get('projectName', 'Unnamed Project'),
+            "project_id": str(project_id),
+            "project_name": str(project_info.get('projectName', 'Unnamed Project')),
             "prediction": {
                 "success_probability": float(success_probability),
                 "success_percentage": float(success_probability * 100),
-                "risk_level": risk_level,
-                "risk_indicator": risk_emoji,
-                "recommendation": recommendation
+                "risk_level": str(risk_level),
+                "risk_indicator": str(risk_emoji),
+                "recommendation": str(recommendation)
             },
-            "key_insights": key_insights,
-            "analysis_timestamp": datetime.now().isoformat(),
+            "key_insights": [str(insight) for insight in key_insights],
+            "analysis_timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "model_info": "Random Forest Regressor (R² score: 0.87)"
         }
+        
+        # Validate that the response can be properly serialized
+        try:
+            import json
+            json.dumps(response_data)
+        except (TypeError, ValueError) as json_err:
+            # If serialization fails, return a simplified valid response
+            return Response({
+                "error": "Data serialization issue",
+                "details": str(json_err),
+                "project_id": str(project_id),
+                "success_probability": float(success_probability)
+            })
         
         return Response(response_data)
         
     except Exception as e:
+        # Ensure the error response is also valid JSON
         return Response({
             "error": "Failed to generate prediction",
             "details": str(e)
@@ -1226,3 +1245,5 @@ def predict_investment(request, project_id):
 # Example urlpatterns = [
 #     path('api/predict_investment/<str:project_id>/', predict_investment),
 # ]
+
+
