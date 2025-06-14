@@ -29,8 +29,6 @@ from user.views import (
     PersonalDataList,
     PersonalDataDetail,
     sign_in,
-    #submit_review,
-    #request_password_reset,
     upload_video,
     get_reels,
     upload_national_card,
@@ -39,7 +37,11 @@ from user.views import (
     life_picture, 
     profile_details,
     investment_details,
-    set_user_role
+    set_user_role,
+    get_user_data,
+    change_password,
+    change_email,
+    delete_account
 )
 
 # Founder app views
@@ -58,9 +60,8 @@ from founder.views import (
     ProductsAPI,
     investor_manager,
     get_revenue_growth,
-    add_revenue_entry
-    
-
+    add_revenue_entry,
+    predict_investment
     )
 
 # Investor app views
@@ -68,7 +69,6 @@ from investor.views import (
     interests,
     get_category_percentages,
     get_user_interest_projects,
-    #get_other_projects,
     SavedProjectsAPI,
     get_dashboard_summary,
     initiate_payment,
@@ -83,18 +83,12 @@ from investor.views import (
     closing_soon_projects,
     top_raised_projects,
     trending_this_month,
-    get_reports,
-    create_report,
-    update_report,
-    delete_report,
-    get_transaction_reports,
-    create_transaction_report,
-    update_transaction_report,
-    delete_transaction_report,
-    get_financial_reports,
-    create_financial_report,
-    update_financial_report,
-    delete_financial_report,
+    FinancialReportDetailView,
+    FinancialReportView,
+    ReportView,
+    ReportDetailView,
+    TransactionReportView,
+    TransactionReportDetailView,
     user_investment_project_details,
 )
 
@@ -133,7 +127,6 @@ urlpatterns = [
     path('personal-data/', PersonalDataList.as_view(), name='personal-data-list'),
     path('personal-data/<str:user_id>/', PersonalDataDetail.as_view(), name='personal-data-detail'),
     path('sign-in/', sign_in, name='sign_in'),
-    #path('submit_review/', submit_review, name='submit_review'),
     path('password-reset-link/', send_reset_link, name='password-reset-link'),
     path('upload-video/', upload_video, name='upload_video'),
     path('get-reels/', get_reels, name='get_reels'),
@@ -144,11 +137,14 @@ urlpatterns = [
     path('account-verificiation/',  profile_details, name='account_verificiation'), 
     path('account-verificiation-2/',  investment_details, name='account_verificiation'), 
     path('role/', set_user_role, name='set_role'),
+    path('profile/<str:user_id>/', get_user_data, name='profile'),
+    path('change-password/', change_password, name='set_role'),
+    path('change-email/', change_email, name='set_role'),
+    path('delete-account/', delete_account, name='set_role'),
 
 
     # Investor endpoints
     path('interests/', interests, name='interests'),
-    #path('get_other_projects/', get_other_projects, name='get_other_projects'),
     path('welcome/<str:user_id>/', investor_profile, name='welcome'),
     path('interest-projects/<str:user_id>/', get_user_interest_projects, name='get_user_interest_projects'),
     path('closing-soon/', closing_soon_projects, name='closing_soon_projects'),
@@ -162,34 +158,26 @@ urlpatterns = [
     path('initiate-payment/', initiate_payment, name='initiate_payment'),
     path('paymob-callback/', paymob_callback, name='paymob_callback'),
     path('search/', search_projects, name='search'),
-    path('add-invested-project/', add_invested_project, name='add_invested_project'),
+    path('add-invested-project/', add_invested_project, name='add_invested_project'), # dump data
     path('dashboard/total-investments/<str:user_id>/', total_investments, name='add_invested_project'),
     path('dashboard/invested-projects/<str:user_id>/', get_user_invested_projects, name='get_user_invested_project'),
     path('dashboard/roi-vs-saving/<str:user_id>/', roi_vs_saving, name="roi_vs_saving"),
     path('dashboard/balance-history/<str:user_id>/', balance_history, name="balance_history"),
-    path('dashboard/growth/<str:user_id>/', get_investment_growth, name='get_investment_growth'),
-    path('dashboard/investments/<str:user_id>/',get_my_investments, name='get_my_investments'),
-    path('dashboard/distribution/<str:user_id>/', get_investment_distribution, name='get_investment_distribution'),
     path('invested-projects/<str:user_id>/<str:investments_id>/', user_investment_project_details, name='get_investment_distribution'),
-    path('reports/<str:project_id>/', get_reports, name='get_reports'),
-    path('reports/create/', create_report, name='create_report'),
-    path('reports/<str:report_id>/update/', update_report, name='update_report'),
-    path('reports/<str:report_id>/delete/', delete_report, name='delete_report'),
-    path('transaction-reports/<str:project_id>/', get_transaction_reports, name='get_transaction_reports'),
-    path('transaction-reports/create/', create_transaction_report, name='create_transaction_report'),
-    path('transaction-reports/<str:report_id>/update/', update_transaction_report, name='update_transaction_report'),
-    path('transaction-reports/<str:report_id>/delete/', delete_transaction_report, name='delete_transaction_report'),
-    path('financial-reports/<str:project_id>/', get_financial_reports, name='get_financial_reports'),
-    path('financial-reports/create/', create_financial_report, name='create_financial_report'),
-    path('financial-reports/<str:report_id>/update/', update_financial_report, name='update_financial_report'),
-    path('financial-reports/<str:report_id>/delete/', delete_financial_report, name='delete_financial_report'),
+    path('investor/<str:user_id>/financial-reports/', FinancialReportView.as_view(), name='financial-report'),
+    path('investor/financial-reports/<str:report_id>/', FinancialReportDetailView.as_view(), name='financial-report-detail'),
+    path('investor/transaction-reports/<str:user_id>/', TransactionReportView.as_view(), name='transaction-reports'),
+    path('investor/transaction-reports/<str:report_id>/detail/', TransactionReportDetailView.as_view(), name='transaction-report-detail'),
+    path('investor/reports/<str:report_id>/detail/',ReportDetailView.as_view(), name='report-detail'),
+    path('investor/reports/<str:user_id>/', ReportView.as_view(), name='reports'),
+
 
     # Founder endpoints
     path('insert-project/', insert_project, name='insert_project'),
     path('insert-business-details/', insert_business_details, name='insert_business_details'),
     path('create-project/', create_project, name='create_project'),
     path('founder/transactions/<str:user_id>/', TransactionsAPI.as_view(), name="transactions_api"),
-    path('products/', ProductsAPI.as_view(), name="add_product"),
+    path('founder/products/', ProductsAPI.as_view(), name="add_product"),
     path('email/', send_phase3_email, name='email'),
     path('founder-home/<str:project_id>', founder_home, name='founder_home'),
     path('founder/dashboard/overview/<str:user_id>/', founder_dashboard_overview, name='founder_dashboard_overview'), # flutter, web
@@ -203,10 +191,15 @@ urlpatterns = [
 
     # Web endpoints
     #path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
+    path('add_monthly_finance/', add_monthly_finance, name='add_monthly_finance'),
+    path('dashboard/growth/<str:user_id>/', get_investment_growth, name='get_investment_growth'),
+    path('dashboard/investments/<str:user_id>/',get_my_investments, name='get_my_investments'),
+    path('dashboard/distribution/<str:user_id>/', get_investment_distribution, name='get_investment_distribution'),
     path('web/founder/dashboard/portfolio-vs-comparison/<str:user_id>/', portfolio_vs_comparison, name='portfolio_vs_comparison'),
     path('web/founder/investor-managment/<str:user_id>/', investor_management, name='investor_management'),
-    path('add_monthly_finance/', add_monthly_finance, name='add_monthly_finance'),
+    
 
+    path('api/predict_investment/<str:project_id>/', predict_investment),   
     
     # Swagger documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

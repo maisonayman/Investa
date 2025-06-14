@@ -11,18 +11,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework import status
 from collections import defaultdict
 from rest_framework.views import APIView
-import firebase_admin
-from firebase_admin import credentials
-from django.views.decorators.csrf import csrf_exempt
 
-# Initialize Firebase (make sure this is done only once)
-try:
-    firebase_admin.get_app()
-except ValueError:
-    cred = credentials.Certificate("path/to/your/serviceAccountKey.json")
-    firebase_admin.initialize_app(cred, {
-        'databaseURL': 'your-firebase-database-url'
-    })
+
+
 
 @api_view(['POST'])
 def interests(request):
@@ -671,6 +662,7 @@ def get_project_by_id(request, project_id):
         )
 
 
+# flutter only
 @api_view(['GET'])
 def get_user_invested_projects(request, user_id):
     """
@@ -891,461 +883,381 @@ def user_investment_project_details(request, user_id, investments_id):
         return Response({"error": str(e)}, status=500)
 
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def get_reports(request, project_id):
-    """
-    Get all reports for a specific project
-    """
-    try:
-        print("Project ID:", project_id)  # Debug print
-        
-        if not project_id:
-            return Response({
-                'error': 'Project ID is required',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get reports from Firebase
-        reports_ref = db.reference(f'projects/{project_id}/reports')
-        reports = reports_ref.get()
-        print("Firebase Response:", reports)  # Debug print
-
-        if not reports:
-            return Response({
-                'data': [],
-                'message': 'No reports found',
-                'status': 'success'
-            }, status=status.HTTP_200_OK)
-
-        # Transform the data into the required format
-        formatted_reports = []
-        for report_id, report_data in reports.items():
-            formatted_report = {
-                'id': report_id,
-                'title': report_data.get('title'),
-                'date': report_data.get('date'),
-                'return': report_data.get('return_value'),
-                'type': report_data.get('type'),
-                'status': report_data.get('status'),
-                'details': report_data.get('details')
-            }
-            formatted_reports.append(formatted_report)
-
-        return Response({
-            'data': formatted_reports,
-            'message': 'Reports retrieved successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        print("Error:", str(e))  # Debug print
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def create_report(request):
-    """
-    Create a new report
-    """
-    try:
-        print("Request Data:", request.data)  # Debug print
-        
-        # Validate required fields
-        required_fields = ['project_id', 'title', 'date', 'return_value', 'type', 'details']
-        missing_fields = [field for field in required_fields if field not in request.data]
-        
-        if missing_fields:
-            return Response({
-                'error': f'Missing required fields: {", ".join(missing_fields)}',
-                'status': 'error',
-                'received_data': request.data
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate title
-        valid_titles = ['PORTFOLIO', 'MARKET', 'RISK']
-        if request.data.get('title') not in valid_titles:
-            return Response({
-                'error': f'Invalid title. Must be one of: {", ".join(valid_titles)}',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate type
-        valid_types = ['QUARTERLY', 'MONTHLY']
-        if request.data.get('type') not in valid_types:
-            return Response({
-                'error': f'Invalid type. Must be one of: {", ".join(valid_types)}',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        report_data = {
-            'title': request.data.get('title'),
-            'date': request.data.get('date'),
-            'return_value': request.data.get('return_value'),
-            'type': request.data.get('type'),
-            'status': request.data.get('status', 'ACTIVE'),
-            'details': request.data.get('details'),
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        }
-
-        print("Report Data to be saved:", report_data)  # Debug print
-
-        # Add report to Firebase
-        reports_ref = db.reference(f'projects/{request.data.get("project_id")}/reports')
-        new_report = reports_ref.push(report_data)
-
-        return Response({
-            'data': {
-                'id': new_report.key,
-                **report_data
-            },
-            'message': 'Report created successfully',
-            'status': 'success'
-        }, status=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        print("Error:", str(e))  # Debug print
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['PUT'])
-@permission_classes([AllowAny])
-def update_report(request, report_id):
-    """
-    Update an existing report
-    """
-    try:
-        project_id = request.data.get('project_id')
-        if not project_id:
-            return Response({
-                'error': 'Project ID is required',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        report_ref = db.reference(f'projects/{project_id}/reports/{report_id}')
-        report = report_ref.get()
-
-        if not report:
-            return Response({
-                'error': 'Report not found',
-                'status': 'error'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        update_data = {
-            'title': request.data.get('title', report.get('title')),
-            'date': request.data.get('date', report.get('date')),
-            'return_value': request.data.get('return_value', report.get('return_value')),
-            'type': request.data.get('type', report.get('type')),
-            'status': request.data.get('status', report.get('status')),
-            'details': request.data.get('details', report.get('details')),
-            'updated_at': datetime.now().isoformat()
-        }
-
-        report_ref.update(update_data)
-
-        return Response({
-            'data': {
-                'id': report_id,
-                **update_data
-            },
-            'message': 'Report updated successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['DELETE'])
-@permission_classes([AllowAny])
-def delete_report(request, report_id):
-    """
-    Delete a report
-    """
-    try:
-        project_id = request.query_params.get('project_id')
-        if not project_id:
-            return Response({
-                'error': 'Project ID is required',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        report_ref = db.reference(f'projects/{project_id}/reports/{report_id}')
-        report = report_ref.get()
-
-        if not report:
-            return Response({
-                'error': 'Report not found',
-                'status': 'error'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        report_ref.delete()
-        return Response({
-            'message': 'Report deleted successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def get_transaction_reports(request, project_id):
-    """
-    Get all transaction reports for a specific project
-    """
-    try:
-        print("Project ID:", project_id)  # Debug print
-        
-        if not project_id:
-            return Response({
-                'error': 'Project ID is required',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Get transaction reports from Firebase
-        reports_ref = db.reference(f'projects/{project_id}/transaction_reports')
-        reports = reports_ref.get()
-        print("Firebase Response:", reports)  # Debug print
-
-        if not reports:
-            return Response({
-                'data': [],
-                'message': 'No transaction reports found',
-                'status': 'success'
-            }, status=status.HTTP_200_OK)
-
-        # Transform the data into the required format
-        formatted_reports = []
-        for report_id, report_data in reports.items():
-            formatted_report = {
-                'id': report_id,
-                'title': report_data.get('title'),
-                'date': report_data.get('date'),
-                'amount': report_data.get('amount'),
-                'type': report_data.get('type'),
-                'status': report_data.get('status'),
-                'details': report_data.get('details')
-            }
-            formatted_reports.append(formatted_report)
-
-        return Response({
-            'data': formatted_reports,
-            'message': 'Transaction reports retrieved successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        print("Error:", str(e))  # Debug print
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class CreateTransactionReportView(APIView):
+class ReportView(APIView):
     permission_classes = [AllowAny]
-    
+
+    def get(self, request, user_id):
+        """
+        Get all reports for a specific user
+        """
+        try:
+            reports_ref = db.reference(f'users/{user_id}/reports')
+            reports = reports_ref.get()
+
+            if not reports:
+                return Response({
+                    'data': [],
+                    'message': 'No reports found',
+                    'status': 'success'
+                }, status=status.HTTP_200_OK)
+
+            formatted_reports = []
+            for report_id, report_data in reports.items():
+                formatted_report = {
+                    'id': report_id,
+                    'title': report_data.get('title'),
+                    'date': report_data.get('date'),
+                    'return': report_data.get('return_value'),
+                    'type': report_data.get('type'),
+                    'status': report_data.get('status'),
+                    'details': report_data.get('details')
+                }
+                formatted_reports.append(formatted_report)
+
+            return Response({
+                'data': formatted_reports,
+                'message': 'Reports retrieved successfully',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'error': str(e),
+                'status': 'error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def post(self, request):
         """
-        Create a new transaction report
+        Create a new report for a user
         """
-        print("Method:", request.method)  # Debug print
-        print("Request Data:", request.data)  # Debug print
-        
         try:
-            data = request.data
-
-            # Validate required fields
-            required_fields = ['project_id', 'title', 'date', 'amount', 'type', 'details']
-            missing_fields = [field for field in required_fields if field not in data]
-            
-            if missing_fields:
+            required_fields = ['user_id', 'title', 'date', 'return_value', 'type', 'details']
+            missing = [f for f in required_fields if f not in request.data]
+            if missing:
                 return Response({
-                    'error': f'Missing required fields: {", ".join(missing_fields)}',
-                    'status': 'error',
-                    'received_data': data
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Validate title
-            valid_titles = ['TRANSACTION_HISTORY', 'SETTLEMENT_REPORT', 'TRADING_ACTIVITY']
-            if data.get('title') not in valid_titles:
-                return Response({
-                    'error': f'Invalid title. Must be one of: {", ".join(valid_titles)}',
+                    'error': f'Missing fields: {", ".join(missing)}',
                     'status': 'error'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate type
-            valid_types = ['DAILY', 'WEEKLY']
-            if data.get('type') not in valid_types:
+            if request.data['title'] not in ['PORTFOLIO', 'MARKET', 'RISK']:
                 return Response({
-                    'error': f'Invalid type. Must be one of: {", ".join(valid_types)}',
+                    'error': 'Invalid title',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            if request.data['type'] not in ['MONTHLY', 'QUARTERLY']:
+                return Response({
+                    'error': 'Invalid type',
                     'status': 'error'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             report_data = {
-                'title': data.get('title'),
-                'date': data.get('date'),
-                'amount': data.get('amount'),
-                'type': data.get('type'),
-                'status': data.get('status', 'ACTIVE'),
-                'details': data.get('details'),
+                'title': request.data['title'],
+                'date': request.data['date'],
+                'return_value': request.data['return_value'],
+                'type': request.data['type'],
+                'status': request.data.get('status', 'ACTIVE'),
+                'details': request.data['details'],
                 'created_at': datetime.now().isoformat(),
                 'updated_at': datetime.now().isoformat()
             }
 
-            print("Report Data to be saved:", report_data)  # Debug print
-
-            # Add report to Firebase
-            reports_ref = db.reference(f'projects/{data.get("project_id")}/transaction_reports')
-            new_report = reports_ref.push(report_data)
+            ref = db.reference(f'users/{request.data["user_id"]}/reports')
+            new_report = ref.push(report_data)
 
             return Response({
                 'data': {
                     'id': new_report.key,
                     **report_data
                 },
-                'message': 'Transaction report created successfully',
+                'message': 'Report created successfully',
                 'status': 'success'
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            print("Error:", str(e))  # Debug print
             return Response({
                 'error': str(e),
                 'status': 'error'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['PUT'])
-@permission_classes([AllowAny])
-def update_transaction_report(request, report_id):
-    """
-    Update an existing transaction report
-    """
-    try:
-        project_id = request.data.get('project_id')
-        if not project_id:
-            return Response({
-                'error': 'Project ID is required',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        report_ref = db.reference(f'projects/{project_id}/transaction_reports/{report_id}')
-        report = report_ref.get()
-
-        if not report:
-            return Response({
-                'error': 'Report not found',
-                'status': 'error'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        update_data = {
-            'title': request.data.get('title', report.get('title')),
-            'date': request.data.get('date', report.get('date')),
-            'amount': request.data.get('amount', report.get('amount')),
-            'type': request.data.get('type', report.get('type')),
-            'status': request.data.get('status', report.get('status')),
-            'details': request.data.get('details', report.get('details')),
-            'updated_at': datetime.now().isoformat()
-        }
-
-        report_ref.update(update_data)
-
-        return Response({
-            'data': {
-                'id': report_id,
-                **update_data
-            },
-            'message': 'Transaction report updated successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        print("Error:", str(e))  # Debug print
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['DELETE'])
-@permission_classes([AllowAny])
-def delete_transaction_report(request, report_id):
-    """
-    Delete a transaction report
-    """
-    try:
-        project_id = request.query_params.get('project_id')
-        if not project_id:
-            return Response({
-                'error': 'Project ID is required',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        report_ref = db.reference(f'projects/{project_id}/transaction_reports/{report_id}')
-        report = report_ref.get()
-
-        if not report:
-            return Response({
-                'error': 'Report not found',
-                'status': 'error'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        report_ref.delete()
-        return Response({
-            'message': 'Transaction report deleted successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        print("Error:", str(e))  # Debug print
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class CreateFinancialReportView(APIView):
+class ReportDetailView(APIView):
     permission_classes = [AllowAny]
-    
+
+    def put(self, request, report_id):
+        """
+        Update a report for a user
+        """
+        try:
+            user_id = request.data.get('user_id')
+            if not user_id:
+                return Response({
+                    'error': 'User ID is required',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference(f'users/{user_id}/reports/{report_id}')
+            report = ref.get()
+            if not report:
+                return Response({
+                    'error': 'Report not found',
+                    'status': 'error'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            updated_data = {
+                'title': request.data.get('title', report.get('title')),
+                'date': request.data.get('date', report.get('date')),
+                'return_value': request.data.get('return_value', report.get('return_value')),
+                'type': request.data.get('type', report.get('type')),
+                'status': request.data.get('status', report.get('status')),
+                'details': request.data.get('details', report.get('details')),
+                'updated_at': datetime.now().isoformat()
+            }
+            ref.update(updated_data)
+
+            return Response({
+                'data': {
+                    'id': report_id,
+                    **updated_data
+                },
+                'message': 'Report updated successfully',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'error': str(e),
+                'status': 'error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def delete(self, request, report_id):
+        """
+        Delete a report for a user
+        """
+        try:
+            user_id = request.query_params.get('user_id')
+            if not user_id:
+                return Response({
+                    'error': 'User ID is required',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference(f'users/{user_id}/reports/{report_id}')
+            report = ref.get()
+            if not report:
+                return Response({
+                    'error': 'Report not found',
+                    'status': 'error'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            ref.delete()
+            return Response({
+                'message': 'Report deleted successfully',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'error': str(e),
+                'status': 'error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class TransactionReportView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id):
+        try:
+            ref = db.reference(f'users/{user_id}/transaction_reports')
+            reports = ref.get()
+
+            if not reports:
+                return Response({
+                    'data': [],
+                    'message': 'No transaction reports found',
+                    'status': 'success'
+                }, status=status.HTTP_200_OK)
+
+            formatted_reports = [
+                {
+                    'id': report_id,
+                    'title': data.get('title'),
+                    'date': data.get('date'),
+                    'amount': data.get('amount'),
+                    'type': data.get('type'),
+                    'status': data.get('status'),
+                    'details': data.get('details')
+                }
+                for report_id, data in reports.items()
+            ]
+
+            return Response({
+                'data': formatted_reports,
+                'message': 'Transaction reports retrieved successfully',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({'error': str(e), 'status': 'error'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def post(self, request):
+        try:
+            data = request.data
+            required_fields = ['user_id', 'title', 'date', 'amount', 'type', 'details']
+            missing = [f for f in required_fields if f not in data]
+
+            if missing:
+                return Response({'error': f'Missing fields: {", ".join(missing)}', 'status': 'error'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            if data['title'] not in ['TRANSACTION_HISTORY', 'SETTLEMENT_REPORT', 'TRADING_ACTIVITY']:
+                return Response({'error': 'Invalid title', 'status': 'error'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            if data['type'] not in ['DAILY', 'WEEKLY']:
+                return Response({'error': 'Invalid type', 'status': 'error'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            report_data = {
+                'title': data['title'],
+                'date': data['date'],
+                'amount': data['amount'],
+                'type': data['type'],
+                'status': data.get('status', 'ACTIVE'),
+                'details': data['details'],
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
+
+            ref = db.reference(f'users/{data["user_id"]}/transaction_reports')
+            new_ref = ref.push(report_data)
+
+            return Response({
+                'data': {'id': new_ref.key, **report_data},
+                'message': 'Transaction report created successfully',
+                'status': 'success'
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({'error': str(e), 'status': 'error'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class TransactionReportDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    def put(self, request, report_id):
+        try:
+            user_id = request.data.get('user_id')
+            if not user_id:
+                return Response({'error': 'User ID is required', 'status': 'error'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference(f'users/{user_id}/transaction_reports/{report_id}')
+            report = ref.get()
+            if not report:
+                return Response({'error': 'Report not found', 'status': 'error'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            update_data = {
+                'title': request.data.get('title', report.get('title')),
+                'date': request.data.get('date', report.get('date')),
+                'amount': request.data.get('amount', report.get('amount')),
+                'type': request.data.get('type', report.get('type')),
+                'status': request.data.get('status', report.get('status')),
+                'details': request.data.get('details', report.get('details')),
+                'updated_at': datetime.now().isoformat()
+            }
+
+            ref.update(update_data)
+
+            return Response({
+                'data': {'id': report_id, **update_data},
+                'message': 'Transaction report updated successfully',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e), 'status': 'error'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def delete(self, request, report_id):
+        try:
+            user_id = request.query_params.get('user_id')
+            if not user_id:
+                return Response({'error': 'User ID is required', 'status': 'error'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference(f'users/{user_id}/transaction_reports/{report_id}')
+            if not ref.get():
+                return Response({'error': 'Report not found', 'status': 'error'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            ref.delete()
+            return Response({'message': 'Transaction report deleted successfully', 'status': 'success'},
+                            status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e), 'status': 'error'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FinancialReportView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id):
+        """
+        Get all financial reports for a user
+        """
+        try:
+            reports_ref = db.reference(f'users/{user_id}/financial_reports')
+            reports = reports_ref.get()
+
+            if not reports:
+                return Response({
+                    'message': 'No financial reports found',
+                    'data': [],
+                    'status': 'success'
+                }, status=status.HTTP_200_OK)
+
+            reports_list = []
+            for report_id, report in reports.items():
+                reports_list.append({
+                    'id': report_id,
+                    **report
+                })
+
+            return Response({
+                'data': reports_list,
+                'message': 'Financial reports retrieved successfully',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'error': str(e),
+                'status': 'error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def post(self, request):
         """
         Create a new financial report
         """
-        print("Method:", request.method)  # Debug print
-        print("Request Data:", request.data)  # Debug print
-        
         try:
             data = request.data
-
-            # Validate required fields
-            required_fields = ['project_id', 'title', 'date', 'amount', 'details']
+            required_fields = ['user_id', 'title', 'date', 'amount', 'details']
             missing_fields = [field for field in required_fields if field not in data]
-            
+
             if missing_fields:
                 return Response({
-                    'error': f'Missing required fields: {", ".join(missing_fields)}',
-                    'status': 'error',
-                    'received_data': data
+                    'error': f'Missing required fields: {"," .join(missing_fields)}',
+                    'status': 'error'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate title
             valid_titles = ['BALANCE_SHEET', 'INCOME_STATEMENT', 'CASH_FLOW']
             if data.get('title') not in valid_titles:
                 return Response({
@@ -1357,17 +1269,14 @@ class CreateFinancialReportView(APIView):
                 'title': data.get('title'),
                 'date': data.get('date'),
                 'amount': data.get('amount'),
-                'type': 'MONTHLY',  # All financial reports are monthly
-                'status': 'COMPLETED',  # All financial reports are completed
+                'type': 'MONTHLY',
+                'status': 'COMPLETED',
                 'details': data.get('details'),
                 'created_at': datetime.now().isoformat(),
                 'updated_at': datetime.now().isoformat()
             }
 
-            print("Report Data to be saved:", report_data)  # Debug print
-
-            # Add report to Firebase
-            reports_ref = db.reference(f'projects/{data.get("project_id")}/financial_reports')
+            reports_ref = db.reference(f'users/{data.get("user_id")}/financial_reports')
             new_report = reports_ref.push(report_data)
 
             return Response({
@@ -1380,7 +1289,85 @@ class CreateFinancialReportView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            print("Error:", str(e))  # Debug print
+            return Response({
+                'error': str(e),
+                'status': 'error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FinancialReportDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    def put(self, request, report_id):
+        """
+        Update a financial report
+        """
+        try:
+            data = request.data
+            user_id = data.get('user_id')
+
+            if not user_id:
+                return Response({
+                    'error': 'User ID is required',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            report_ref = db.reference(f'users/{user_id}/financial_reports/{report_id}')
+            existing_report = report_ref.get()
+
+            if not existing_report:
+                return Response({
+                    'error': 'Report not found',
+                    'status': 'error'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            update_data = {
+                'title': data.get('title', existing_report.get('title')),
+                'date': data.get('date', existing_report.get('date')),
+                'amount': data.get('amount', existing_report.get('amount')),
+                'details': data.get('details', existing_report.get('details')),
+                'updated_at': datetime.now().isoformat()
+            }
+
+            report_ref.update(update_data)
+
+            return Response({
+                'data': {
+                    'id': report_id,
+                    **update_data
+                },
+                'message': 'Financial report updated successfully',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'error': str(e),
+                'status': 'error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def delete(self, request, report_id):
+        """
+        Delete a financial report
+        """
+        try:
+            user_id = request.query_params.get('user_id')
+
+            if not user_id:
+                return Response({
+                    'error': 'User ID is required',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            report_ref = db.reference(f'users/{user_id}/financial_reports/{report_id}')
+            report_ref.delete()
+
+            return Response({
+                'message': 'Financial report deleted successfully',
+                'status': 'success'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
             return Response({
                 'error': str(e),
                 'status': 'error'
@@ -1388,272 +1375,9 @@ class CreateFinancialReportView(APIView):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
-def get_financial_reports(request, project_id):
-    """
-    Get all financial reports for a project
-    """
-    try:
-        # Get reports from Firebase
-        reports_ref = db.reference(f'projects/{project_id}/financial_reports')
-        reports = reports_ref.get()
-
-        if not reports:
-            return Response({
-                'message': 'No financial reports found',
-                'data': [],
-                'status': 'success'
-            }, status=status.HTTP_200_OK)
-
-        # Convert reports to list
-        reports_list = []
-        for report_id, report in reports.items():
-            reports_list.append({
-                'id': report_id,
-                **report
-            })
-
-        return Response({
-            'data': reports_list,
-            'message': 'Financial reports retrieved successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['PUT'])
-@permission_classes([AllowAny])
-def update_financial_report(request, report_id):
-    """
-    Update a financial report
-    """
-    try:
-        data = request.data
-        project_id = data.get('project_id')
-
-        if not project_id:
-            return Response({
-                'error': 'Project ID is required',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Get existing report
-        reports_ref = db.reference(f'projects/{project_id}/financial_reports/{report_id}')
-        existing_report = reports_ref.get()
-
-        if not existing_report:
-            return Response({
-                'error': 'Report not found',
-                'status': 'error'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        # Update report data
-        update_data = {
-            'title': data.get('title', existing_report.get('title')),
-            'date': data.get('date', existing_report.get('date')),
-            'amount': data.get('amount', existing_report.get('amount')),
-            'details': data.get('details', existing_report.get('details')),
-            'updated_at': datetime.now().isoformat()
-        }
-
-        # Update in Firebase
-        reports_ref.update(update_data)
-
-        return Response({
-            'data': {
-                'id': report_id,
-                **update_data
-            },
-            'message': 'Financial report updated successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['DELETE'])
-@permission_classes([AllowAny])
-def delete_financial_report(request, report_id):
-    """
-    Delete a financial report
-    """
-    try:
-        project_id = request.query_params.get('project_id')
-
-        if not project_id:
-            return Response({
-                'error': 'Project ID is required',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Delete from Firebase
-        reports_ref = db.reference(f'projects/{project_id}/financial_reports/{report_id}')
-        reports_ref.delete()
-
-        return Response({
-            'message': 'Financial report deleted successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def create_financial_report(request):
-    """
-    Create a new financial report
-    """
-    print("Method:", request.method)  # Debug print
-    print("Request Data:", request.data)  # Debug print
-    
-    try:
-        data = request.data
-
-        # Validate required fields
-        required_fields = ['project_id', 'title', 'date', 'amount', 'details']
-        missing_fields = [field for field in required_fields if field not in data]
-        
-        if missing_fields:
-            return Response({
-                'error': f'Missing required fields: {", ".join(missing_fields)}',
-                'status': 'error',
-                'received_data': data
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate title
-        valid_titles = ['BALANCE_SHEET', 'INCOME_STATEMENT', 'CASH_FLOW']
-        if data.get('title') not in valid_titles:
-            return Response({
-                'error': f'Invalid title. Must be one of: {", ".join(valid_titles)}',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        report_data = {
-            'title': data.get('title'),
-            'date': data.get('date'),
-            'amount': data.get('amount'),
-            'type': 'MONTHLY',  # All financial reports are monthly
-            'status': 'COMPLETED',  # All financial reports are completed
-            'details': data.get('details'),
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        }
-
-        print("Report Data to be saved:", report_data)  # Debug print
-
-        # Add report to Firebase
-        reports_ref = db.reference(f'projects/{data.get("project_id")}/financial_reports')
-        new_report = reports_ref.push(report_data)
-
-        return Response({
-            'data': {
-                'id': new_report.key,
-                **report_data
-            },
-            'message': 'Financial report created successfully',
-            'status': 'success'
-        }, status=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        print("Error:", str(e))  # Debug print
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def create_transaction_report(request):
-    """
-    Create a new transaction report
-    """
-    print("Method:", request.method)  # Debug print
-    print("Request Data:", request.data)  # Debug print
-    
-    try:
-        data = request.data
-
-        # Validate required fields
-        required_fields = ['project_id', 'title', 'date', 'amount', 'type', 'details']
-        missing_fields = [field for field in required_fields if field not in data]
-        
-        if missing_fields:
-            return Response({
-                'error': f'Missing required fields: {", ".join(missing_fields)}',
-                'status': 'error',
-                'received_data': data
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate title
-        valid_titles = ['TRANSACTION_HISTORY', 'SETTLEMENT_REPORT', 'TRADING_ACTIVITY']
-        if data.get('title') not in valid_titles:
-            return Response({
-                'error': f'Invalid title. Must be one of: {", ".join(valid_titles)}',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate type
-        valid_types = ['DAILY', 'WEEKLY']
-        if data.get('type') not in valid_types:
-            return Response({
-                'error': f'Invalid type. Must be one of: {", ".join(valid_types)}',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        report_data = {
-            'title': data.get('title'),
-            'date': data.get('date'),
-            'amount': data.get('amount'),
-            'type': data.get('type'),
-            'status': data.get('status', 'ACTIVE'),
-            'details': data.get('details'),
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        }
-
-        print("Report Data to be saved:", report_data)  # Debug print
-
-        # Add report to Firebase
-        reports_ref = db.reference(f'projects/{data.get("project_id")}/transaction_reports')
-        new_report = reports_ref.push(report_data)
-
-        return Response({
-            'data': {
-                'id': new_report.key,
-                **report_data
-            },
-            'message': 'Transaction report created successfully',
-            'status': 'success'
-        }, status=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        print("Error:", str(e))  # Debug print
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['GET'])
 def total_investments(request, user_id):
     """
-    Get investments for a user from users/{user_id}/investments,
-    grouped by project and combined with project info.
+    Get total investments per project for a user with total amount and latest ROI/date.
     """
     try:
         user_ref = db.reference(f'users/{user_id}/investments')
@@ -1665,20 +1389,40 @@ def total_investments(request, user_id):
         projects_ref = db.reference('projects')
         all_projects = projects_ref.get() or {}
 
-        results = []
+        project_map = {}
 
         for inv_id, inv_data in user_investments.items():
             project_id = inv_data.get('project_id')
-            if not project_id:
+            invested_at = inv_data.get('invested_at', '')
+            roi = inv_data.get('roi')
+            amount = float(inv_data.get('amount', 0))  # نتأكد إن الرقم float
+
+            if not project_id or not invested_at:
                 continue
 
-            project_name = all_projects.get(project_id, {}).get('projectName', 'Unknown Project')
-            invested_at = inv_data.get('invested_at', '')
+            if project_id not in project_map:
+                project_map[project_id] = {
+                    'project_id': project_id,
+                    'project_name': all_projects.get(project_id, {}).get('projectName', 'Unknown Project'),
+                    'latest_invested_at': invested_at,
+                    'roi': roi,
+                    'invested_amount': amount
+                }
+            else:
+                project_map[project_id]['invested_amount'] += amount
 
+                if invested_at > project_map[project_id]['latest_invested_at']:
+                    project_map[project_id]['latest_invested_at'] = invested_at
+                    project_map[project_id]['roi'] = roi
+
+        results = []
+        for project in project_map.values():
             results.append({
-                'project_id': project_id,
-                'project_name': project_name,
-                'start_date': invested_at.split(' ')[0],  # remove time if you want
+                'project_id': project['project_id'],
+                'project_name': project['project_name'],
+                'start_date': project['latest_invested_at'].split(' ')[0],
+                'roi': project['roi'],
+                'invested_amount': project['invested_amount']
             })
 
         return JsonResponse(results, safe=False, status=200)
@@ -1686,145 +1430,4 @@ def total_investments(request, user_id):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-'''
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def get_revenue_growth(request, project_id):
-    """
-    Get revenue growth data aggregated by daily, monthly, or yearly periods.
-    Query parameters: period (daily, monthly, yearly)
-    """
-    try:
-        period = request.query_params.get('period', 'yearly').lower() # Default to yearly
-        valid_periods = ['daily', 'monthly', 'yearly']
 
-        if period not in valid_periods:
-            return Response({
-                'error': f'Invalid period. Must be one of: {", ".join(valid_periods)}',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        print(f"Fetching revenue data for project {project_id} with period {period}") # Debug print
-
-        # Fetch all revenue entries for the project
-        revenue_ref = db.reference(f'projects/{project_id}/revenue_entries')
-        revenue_entries = revenue_ref.get()
-
-        if not revenue_entries:
-            return Response({
-                'data': [],
-                'message': 'No revenue data found for this project',
-                'status': 'success'
-            }, status=status.HTTP_200_OK)
-        
-        # Aggregate data
-        aggregated_data = defaultdict(float)
-        
-        for entry_id, entry_data in revenue_entries.items():
-            date_str = entry_data.get('date')
-            amount = float(entry_data.get('amount', 0))
-
-            if not date_str or not amount:
-                continue
-
-            try:
-                entry_date = datetime.strptime(date_str, '%Y-%m-%d')
-            except ValueError:
-                continue # Skip invalid dates
-
-            key = ""
-            if period == 'daily':
-                key = entry_date.strftime('%Y-%m-%d')
-            elif period == 'monthly':
-                key = entry_date.strftime('%Y-%m')
-            elif period == 'yearly':
-                key = entry_date.strftime('%Y')
-            
-            aggregated_data[key] += amount
-
-        # Sort data by key (date/month/year)
-        sorted_data = sorted(aggregated_data.items())
-        
-        # Format for response
-        formatted_results = [{'period': k, 'revenue': v} for k, v in sorted_data]
-
-        return Response({
-            'data': formatted_results,
-            'message': f'Revenue growth data ({period}) retrieved successfully',
-            'status': 'success'
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        print("Error in get_revenue_growth:", str(e)) # Debug print
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-'''
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def create_revenue_entry(request):
-    """
-    Create a new revenue entry for a project.
-    Expected data: project_id, date (YYYY-MM-DD), amount (number)
-    """
-    print("Method:", request.method)
-    print("Request Data:", request.data)
-    
-    try:
-        data = request.data
-
-        required_fields = ['project_id', 'date', 'amount']
-        missing_fields = [field for field in required_fields if field not in data]
-
-        if missing_fields:
-            return Response({
-                'error': f'Missing required fields: {", ".join(missing_fields)}',
-                'status': 'error',
-                'received_data': data
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Validate date format
-        try:
-            datetime.strptime(data.get('date'), '%Y-%m-%d')
-        except ValueError:
-            return Response({
-                'error': 'Invalid date format. Expected YYYY-MM-DD.',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Validate amount is a number
-        try:
-            amount = float(data.get('amount'))
-        except ValueError:
-            return Response({
-                'error': 'Invalid amount. Must be a number.',
-                'status': 'error'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        revenue_entry_data = {
-            'date': data.get('date'),
-            'amount': amount,
-            'created_at': datetime.now().isoformat()
-        }
-
-        # Add entry to Firebase
-        revenue_ref = db.reference(f'projects/{data.get("project_id")}/revenue_entries')
-        new_entry = revenue_ref.push(revenue_entry_data)
-
-        return Response({
-            'data': {
-                'id': new_entry.key,
-                **revenue_entry_data
-            },
-            'message': 'Revenue entry created successfully',
-            'status': 'success'
-        }, status=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        print("Error in create_revenue_entry:", str(e))
-        return Response({
-            'error': str(e),
-            'status': 'error'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

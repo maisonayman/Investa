@@ -674,3 +674,9 @@ def delete_account(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+def get_user_data(user_id):
+    ref = db.reference(f'users/{user_id}')
+    return ref.get()

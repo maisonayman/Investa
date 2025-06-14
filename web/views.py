@@ -55,40 +55,67 @@ def get_investment_growth(request, user_id):
     })
 
 
-# 3. Get My Investments (list)
 @api_view(['GET'])
 def get_my_investments(request, user_id):
-    investments_ref = db.reference(f'users/{user_id}/investments')
-    data = investments_ref.get() or {}
+    try:
+        investments_ref = db.reference(f'users/{user_id}/investments')
+        user_investments = investments_ref.get() or {}
 
-    response = []
-    for business_id, inv in data.items():
-        response.append({
-            "name": inv.get('business_name'),
-            "amount": inv.get('amount'),
-            "roi": inv.get('roi', 0)
-        })
+        projects_ref = db.reference('projects')
+        all_projects = projects_ref.get() or {}
 
-    return Response(response)
+        response = []
+        for inv_id, inv in user_investments.items():
+            project_id = inv.get('project_id')
+            project_name = all_projects.get(project_id, {}).get('projectName', 'Unknown Project')
+
+            response.append({
+                "name": project_name,
+                "amount": inv.get('invested_amount', 0),
+                "roi": inv.get('roi', 0)
+            })
+
+        return Response(response, status=200)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 
-# 4. Get Investment Distribution (pie chart)
+
 @api_view(['GET'])
 def get_investment_distribution(request, user_id):
     investments_ref = db.reference(f'users/{user_id}/investments')
-    data = investments_ref.get() or {}
+    user_investments = investments_ref.get() or {}
 
-    total = sum([inv.get('amount', 0) for inv in data.values()])
+    if not user_investments:
+        return Response([], status=status.HTTP_200_OK)
+
+    projects_ref = db.reference('projects')
+    all_projects = projects_ref.get() or {}
+
+    # ✅ احسب التوتال
+    total = sum([float(inv.get('invested_amount', 0)) for inv in user_investments.values()])
+
     distribution = []
 
-    for business_id, inv in data.items():
-        percent = (inv.get('amount', 0) / total * 100) if total > 0 else 0
+    for inv in user_investments.values():
+        project_id = inv.get("project_id")
+        invested_amount = float(inv.get("invested_amount", 0))
+
+        # ✅ هات اسم المشروع من projects
+        project_data = all_projects.get(project_id, {})
+        project_name = project_data.get("projectName", "Unknown Project")
+
+        # ✅ احسب النسبة
+        percent = (invested_amount / total * 100) if total > 0 else 0
+
         distribution.append({
-            "label": inv.get("business_name"),
+            "label": project_name,
             "value": round(percent, 1)
         })
 
     return Response(distribution)
+
 
 
 @api_view(['GET'])

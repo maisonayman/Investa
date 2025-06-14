@@ -234,7 +234,7 @@ def get_user_data(user_id):
     return ref.get()
 
 
-'''
+
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
 
@@ -690,10 +690,10 @@ def django_get_model_status() -> Dict[str, Any]:
             'error': str(e)
         }
 
-'''
 
 
-'''
+
+
 # Example usage and testing
 if __name__ == "__main__":
     """
@@ -782,4 +782,6 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"❌ Error during testing: {str(e)}")
-        sys.exit(1) '''
+        sys.exit(1) 
+
+        
