@@ -643,16 +643,21 @@ def monthly_finance(request, user_id):
     data = ref.get()
 
     formatted_data = []
+    month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
     if data:
         for month, values in data.items():
+            short_month = month[:3].capitalize()
+            if short_month not in month_order:
+                continue  
+
             formatted_data.append({
-                "month": month.capitalize(),
+                "month": short_month,
                 "revenue": values.get("revenue", 0),
                 "loss": values.get("loss", 0)
             })
 
-        month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         formatted_data.sort(key=lambda x: month_order.index(x["month"]))
 
     return Response(formatted_data)
