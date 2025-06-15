@@ -7,6 +7,7 @@ from datetime import datetime
 from collections import defaultdict
 import calendar
 from Investa.utils import get_founder_projects
+from rest_framework.views import APIView
 
 
 @api_view(['POST'])
@@ -210,3 +211,59 @@ def investor_management(request, user_id):
                     }
 
     return Response({"investors": list(investors_map.values())})
+
+
+
+class DailyTransactionsAPI(APIView):
+    def post(self, request, user_id):
+        try:
+            data = request.data
+            required_fields = ['date', 'type', 'description', 'amount', 'payment_method', 'responsible']
+
+            missing = [field for field in required_fields if field not in data]
+            if missing:
+                return Response({"error": f"Missing fields: {', '.join(missing)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            ref = db.reference(f'users/{user_id}/daily_transactions')
+            new_tx = ref.push({
+                "date": data["date"],
+                "type": data["type"],
+                "description": data["description"],
+                "amount": data["amount"],
+                "payment_method": data["payment_method"],
+                "responsible": data["responsible"]
+            })
+
+            return Response({"message": "success", "id": new_tx.key}, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def get(self, request, user_id):
+        ref = db.reference(f'users/{user_id}/daily_transactions')
+        data = ref.get()
+        total_income = 0
+        total_expenses = 0
+        transactions = []
+
+        if data:
+            for key, tx in data.items():
+                tx["id"] = key
+                amount = float(tx["amount"])
+                if tx["type"] == "Income":
+                    total_income += amount
+                elif tx["type"] == "Expense":
+                    total_expenses += amount
+                transactions.append(tx)
+
+        net_profit = total_income - total_expenses
+        profit_percent = round((net_profit / total_income) * 100, 1) if total_income else 0
+
+        return Response({
+            "total_income": total_income,
+            "total_expenses": total_expenses,
+            "net_profit": net_profit,
+            "profit_percent": profit_percent,
+            "transactions": transactions
+        }, status=status.HTTP_200_OK)    
+        

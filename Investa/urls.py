@@ -44,6 +44,8 @@ from user.views import (
     delete_account
 )
 
+from Investa.utils import get_founder_projects
+
 # Founder app views
 from founder.views import (
     insert_project,
@@ -61,7 +63,8 @@ from founder.views import (
     investor_manager,
     get_revenue_growth,
     add_revenue_entry,
-    predict_investment
+    predict_investment,
+    test_founder_projects
     )
 
 # Investor app views
@@ -98,7 +101,8 @@ from web.views import (
     get_my_investments,
     get_investment_distribution,
     portfolio_vs_comparison,
-    investor_management
+    investor_management,
+    DailyTransactionsAPI
 )
 
 from .utils import get_founder_projects
@@ -137,9 +141,10 @@ urlpatterns = [
     path('account-verificiation-2/',  investment_details, name='account_verificiation'), 
     path('role/', set_user_role, name='set_role'),
     path('profile/<str:user_id>/', get_user_data, name='profile'),
-    path('change-password/', change_password, name='set_role'),
-    path('change-email/', change_email, name='set_role'),
-    path('delete-account/', delete_account, name='set_role'),
+    path('change-password/', change_password, name='change_password'),
+    path('change-email/', change_email, name='change_email'),
+    path('delete-account/', delete_account, name='delete_account'),
+    path('test_founder_projects/<str:user_id>/', test_founder_projects, name='get_founder_projects'),
 
 
     # Investor endpoints
@@ -196,6 +201,7 @@ urlpatterns = [
     path('dashboard/distribution/<str:user_id>/', get_investment_distribution, name='get_investment_distribution'),
     path('web/founder/dashboard/portfolio-vs-comparison/<str:user_id>/', portfolio_vs_comparison, name='portfolio_vs_comparison'),
     path('web/founder/investor-managment/<str:user_id>/', investor_management, name='investor_management'),
+    path('web/founder/daily-transactions/<str:user_id>/', DailyTransactionsAPI.as_view(), name='daily-transactions'),
     
 
     path('api/predict_investment/<str:project_id>/', predict_investment),   

@@ -667,56 +667,48 @@ class TransactionsAPI(APIView):
     def get(self, request, user_id):
         ref = db.reference(f'transactions/{user_id}')
         data = ref.get()
-        total_income = 0
-        total_expenses = 0
+
         transactions = []
 
         if data:
-            for key, tx in data.items():
-                tx["id"] = key
-                amount = float(tx["amount"])
-                if tx["type"] == "Income":
-                    total_income += amount
-                elif tx["type"] == "Expense":
-                    total_expenses += amount
-                transactions.append(tx)
+            for tx_id, tx in data.items():
+                transactions.append({
+                    "transaction_id": tx_id,
+                    "investor_name": tx.get("investor_name", ""),
+                    "amount": float(tx.get("amount", 0)),
+                    "date": tx.get("date", ""),
+                    "type": tx.get("type", "")
+                })
 
-        net_profit = total_income - total_expenses
-        profit_percent = round((net_profit / total_income) * 100, 1) if total_income else 0
-
-        return Response({
-            "total_income": total_income,
-            "total_expenses": total_expenses,
-            "net_profit": net_profit,
-            "profit_percent": profit_percent,
-            "transactions": transactions
-        }, status=status.HTTP_200_OK)
-
+        return Response(transactions, status=status.HTTP_200_OK)
     def post(self, request, user_id):
         try:
             data = request.data
-            required_fields = ['date', 'type', 'description', 'amount', 'payment_method', 'responsible']
+            required_fields = ['investor_name', 'type', 'date', 'amount']
 
             missing = [field for field in required_fields if field not in data]
             if missing:
                 return Response({"error": f"Missing fields: {', '.join(missing)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-            ref = db.reference(f'transactions/{user_id}')
-            new_tx = ref.push({
-                "date": data["date"],
+            transaction_id = str(uuid.uuid4())
+
+            ref = db.reference(f'transactions/{user_id}/{transaction_id}')
+            ref.set({
+                "transaction_id": transaction_id,
+                "investor_name": data["investor_name"],
                 "type": data["type"],
-                "description": data["description"],
-                "amount": data["amount"],
-                "payment_method": data["payment_method"],
-                "responsible": data["responsible"]
+                "date": data["date"],
+                "amount": data["amount"]
             })
 
-            return Response({"message": "success", "id": new_tx.key}, status=status.HTTP_201_CREATED)
+            return Response({
+                "message": "Transaction recorded successfully",
+                "transaction_id": transaction_id
+            }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
- 
 
 class ProductsAPI(APIView):
     def get(self, request):
@@ -781,12 +773,7 @@ class ProductsAPI(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-from collections import defaultdict
-from datetime import datetime
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-import firebase_admin
-from firebase_admin import db
+
 
 @api_view(['GET'])
 def investor_manager(request, user_id):
@@ -945,6 +932,13 @@ def add_revenue_entry(request):
             'error': str(e),
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def test_founder_projects(request, user_id):
+    projects = get_founder_projects(user_id)
+    return Response(projects)
 
 
 

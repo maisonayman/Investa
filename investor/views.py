@@ -14,7 +14,6 @@ from rest_framework.views import APIView
 
 
 
-
 @api_view(['POST'])
 def interests(request):
     try:
@@ -889,7 +888,6 @@ def user_investment_project_details(request, user_id):
         return Response({"error": str(e)}, status=500)
 
 
-
 class ReportView(APIView):
     permission_classes = [AllowAny]
 
@@ -1070,7 +1068,6 @@ class ReportDetailView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 class TransactionReportView(APIView):
     permission_classes = [AllowAny]
 
@@ -1150,7 +1147,6 @@ class TransactionReportView(APIView):
         except Exception as e:
             return Response({'error': str(e), 'status': 'error'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 class TransactionReportDetailView(APIView):
