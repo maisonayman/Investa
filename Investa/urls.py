@@ -106,7 +106,6 @@ from web.views import (
     DailyTransactionsAPI
 )
 
-from .utils import get_founder_projects
 
 # Swagger schema setup
 schema_view = get_schema_view(
