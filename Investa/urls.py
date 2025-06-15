@@ -64,7 +64,6 @@ from founder.views import (
     get_revenue_growth,
     add_revenue_entry,
     predict_investment,
-    test_founder_projects,
     get_project
     )
 
