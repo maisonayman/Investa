@@ -143,7 +143,6 @@ urlpatterns = [
     path('change-password/', change_password, name='change_password'),
     path('change-email/', change_email, name='change_email'),
     path('delete-account/', delete_account, name='delete_account'),
-    path('test_founder_projects/<str:user_id>/', test_founder_projects, name='get_founder_projects'),
 
 
     # Investor endpoints
