@@ -154,7 +154,7 @@ def create_project(request):
 
         # --- Project Info (added userId)
         project_info = {
-            "userId": user_id,
+            "user_id": user_id,
             "projectName": data.get("projectName"),
             "briefDescription": data.get("briefDescription"),
             "detailedDescription": data.get("detailedDescription"),
@@ -171,14 +171,14 @@ def create_project(request):
             "customerGrowthRate": data.get("customerGrowthRate"),
             "churnRate": data.get("churnRate"),
             "monthlyOperatingCosts": data.get("monthlyOperatingCosts"),
-            "debtToEquityRatio": data.get("deptToEquityRatio"),  # spelling في الصورة مكتوب "dept" مش "debt"
+            "debtToEquityRatio": data.get("deptToEquityRatio"),  
             "fundingNeeded": data.get("fundingNeeded"),
             "ownershipPercentage": data.get("ownershipPercentage"),
             "investmentType": data.get("investmentType"),
             "totalInvestorsAllowed": data.get("totalInvestorsAllowed"),
             "maxInvestorShort": data.get("maxInvestorsShort"),
             "maxInvestorLong": data.get("maxInvestorsLong"),
-            "projectLogoUrl": project_logo_url,  # حط اللوجو من عندك هنا، الاسم في الداتا: projectLogoFileName
+            "projectLogoUrl": project_logo_url, 
         }
 
 
@@ -711,9 +711,9 @@ class TransactionsAPI(APIView):
 
 
 class ProductsAPI(APIView):
-    def get(self, request):
+    def get(self, request, user_id):
         try:
-            ref = db.reference('products')
+            ref = db.reference(f'users/{user_id}/products')
             data = ref.get()
             products = []
 
@@ -727,20 +727,21 @@ class ProductsAPI(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    def post(self, request):
+    def post(self, request, user_id):
         try:
             data = request.data
-            ref = db.reference('products')
+            ref = db.reference(f'users/{user_id}/products')
             new_product_ref = ref.push(data)
             product_id = new_product_ref.key
 
             return Response({
-                "message": "product added succesfully",
+                "message": "product added successfully",
                 "product_id": product_id
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
     def put(self, request):
         try:
@@ -933,12 +934,6 @@ def add_revenue_entry(request):
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def test_founder_projects(request, user_id):
-    projects = get_founder_projects(user_id)
-    return Response(projects)
 
 
 

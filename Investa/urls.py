@@ -64,7 +64,8 @@ from founder.views import (
     get_revenue_growth,
     add_revenue_entry,
     predict_investment,
-    test_founder_projects
+    test_founder_projects,
+    get_project
     )
 
 # Investor app views
@@ -181,9 +182,10 @@ urlpatterns = [
     path('insert-business-details/', insert_business_details, name='insert_business_details'),
     path('create-project/', create_project, name='create_project'),
     path('founder/transactions/<str:user_id>/', TransactionsAPI.as_view(), name="transactions_api"),
-    path('founder/products/', ProductsAPI.as_view(), name="add_product"),
+    path('founder/products/<user_id>/', ProductsAPI.as_view(), name="add_product"),
     path('email/', send_phase3_email, name='email'),
     path('founder-home/<str:project_id>', founder_home, name='founder_home'),
+    path('get-project/<str:project_id>', get_project, name='get_project'),
     path('founder/dashboard/overview/<str:user_id>/', founder_dashboard_overview, name='founder_dashboard_overview'), # flutter, web
     path('founder/dashboard/return-vs-comparison/<str:user_id>/', investment_return_vs_comparison, name='investment_return_vs_comparison'), # flutter, web
     path('founder/dashboard/portfolio-performance/<str:user_id>/', portfolio_performance, name='portfolio_performance'), # flutter only 
@@ -194,7 +196,6 @@ urlpatterns = [
     path('founder/dashboard/revenue-entries/create/', add_revenue_entry, name='add_revenue_entry'),
 
     # Web endpoints
-    #path('add-finance/', add_monthly_finance, name='add_monthly_finance'),
     path('add_monthly_finance/', add_monthly_finance, name='add_monthly_finance'),
     path('dashboard/growth/<str:user_id>/', get_investment_growth, name='get_investment_growth'),
     path('dashboard/investments/<str:user_id>/',get_my_investments, name='get_my_investments'),

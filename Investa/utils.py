@@ -198,7 +198,6 @@ def get_or_create_drive_folder(folder_name, parent_folder_id):
         return folder.get('id')
 
 
-@api_view(['GET'])
 def get_founder_projects(user_id):
     projects_ref = db.reference('projects')
     all_projects = projects_ref.get() or {} # Use a more descriptive name
