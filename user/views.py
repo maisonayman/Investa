@@ -13,7 +13,11 @@ from django.conf import settings
 import requests
 from rest_framework.views import APIView
 from datetime import datetime
-
+import re
+import cv2
+import tempfile
+import easyocr
+from ultralytics import YOLO
 
 @api_view(['POST'])
 def request_otp(request):
@@ -371,16 +375,383 @@ def investment_details(request):
         return Response({"error": "Failed to submit investment data.", "details": str(e)}, status=500)
 
 
+"""
+National ID Card Processing Module
+
+This module handles the processing, validation, and storage of Egyptian national ID cards.
+It uses computer vision and OCR to extract data from ID card images.
+"""
+
+import os
+import re
+import cv2
+import tempfile
+from rest_framework.decorators import api_view
+from django.http import JsonResponse
+from ultralytics import YOLO
+
+# ====================================================
+# CONFIGURATION AND INITIALIZATION
+# ====================================================
+
+
+# Enhanced helper function to find model files with fallback paths
+def get_model_path(model_name):
+    """
+    Get the path to a model file with fallback options.
+    
+    Args:
+        model_name: Name of the model file
+        
+    Returns:
+        str: Path to the model file if found, otherwise raises FileNotFoundError
+    """
+    # List of possible locations to check
+    possible_paths = [
+        # Relative to the current file
+        os.path.join(os.path.dirname(__file__), 'saved_models', model_name),
+        
+        # Relative to the project root
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'saved_models', model_name),
+        
+        # Absolute path options
+        os.path.abspath(os.path.join('saved_models', model_name)),
+        
+        # Just the model name (if it's in the Python path)
+        model_name,
+    ]
+    
+    # Check if any of the paths exist
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"Found model at: {path}")
+            return path
+    
+    # If we got here, none of the paths worked
+    raise FileNotFoundError(f"Could not find model file: {model_name}. Searched in: {possible_paths}")
+
+# Function to safely load YOLO model with error handling
+def load_yolo_model(model_name):
+    """
+    Safely load a YOLO model with error handling.
+    
+    Args:
+        model_name: Name of the model file
+    
+    Returns:
+        YOLO model if successful, None if failed
+    """
+    try:
+        model_path = get_model_path(model_name)
+        print(f"Loading model from: {model_path}")
+        return YOLO(model_path)
+    except Exception as e:
+        print(f"Error loading model {model_name}: {str(e)}")
+        return None
+
+# ====================================================
+# UTILITY FUNCTIONS
+# ====================================================
+
+def expand_bbox_height(bbox, scale=1.2, image_shape=None):
+    """
+    Expand the height of a bounding box while keeping the width constant.
+    
+    Args:
+        bbox: List containing [x1, y1, x2, y2] coordinates
+        scale: Factor by which to scale the height
+        image_shape: Original image dimensions to prevent out-of-bounds coordinates
+        
+    Returns:
+        List with the new bbox coordinates [x1, new_y1, x2, new_y2]
+    """
+    x1, y1, x2, y2 = bbox
+    width = x2 - x1
+    height = y2 - y1
+    center_x = x1 + width // 2
+    center_y = y1 + height // 2
+    new_height = int(height * scale)
+    new_y1 = max(center_y - new_height // 2, 0)
+    new_y2 = min(center_y + new_height // 2, image_shape[0]) if image_shape else center_y + new_height // 2
+    return [x1, new_y1, x2, new_y2]
+
+def preprocess_image(cropped_image):
+    """Convert image to grayscale for better OCR results."""
+    gray_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)   
+    return gray_image
+
+# ====================================================
+# ID CARD PROCESSING
+# ====================================================
+
+def process_image(cropped_image):
+    """
+    Extract all relevant information from a cropped ID card image.
+    
+    Args:
+        cropped_image: The cropped image containing just the ID card
+        
+    Returns:
+        Tuple containing extracted information:
+        (first_name, second_name, merged_name, nid, address, birth_date, governorate, gender)
+    """
+    # Load the trained YOLO model for objects (fields) detection
+    model = YOLO(get_model_path('detect_odjects.pt'))
+    results = model(cropped_image)
+
+    # Variables to store extracted values
+    first_name = ''
+    second_name = ''
+    merged_name = ''
+    nid = ''
+    address = ''
+    serial = ''
+
+    # Decode additional information from the ID number
+    decoded_info = decode_egyptian_id(nid)
+    return (first_name, second_name, nid, address, decoded_info["Birth Date"], 
+            decoded_info["Governorate"], decoded_info["Gender"])
+
+def detect_and_process_id_card(image_path):
+    """
+    Detect an ID card in an image and extract information from it.
+    
+    Args:
+        image_path: Path to the image file
+        
+    Returns:
+        Tuple containing extracted ID information
+    """
+    # Load the ID card detection model
+    id_card_model = YOLO(get_model_path('detect_id_card.pt'))
+    
+    # Perform inference to detect the ID card
+    id_card_results = id_card_model(image_path)
+    # Load the original image using OpenCV
+    image = cv2.imread(image_path)
+
+    # Crop the ID card from the image
+    cropped_image = None
+    for result in id_card_results:
+        for box in result.boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])  # Get bounding box coordinates
+            cropped_image = image[y1:y2, x1:x2]
+            break  # Take the first detected ID card
+        if cropped_image is not None:
+            break
+    
+    if cropped_image is None:
+        raise ValueError("No ID card detected in the image")
+
+    # Pass the cropped image to the processing function
+    return process_image(cropped_image)
+
+def decode_egyptian_id(id_number):
+    """
+    Decode Egyptian national ID number to extract demographic information.
+    
+    Args:
+        id_number: 14-digit Egyptian national ID number
+        
+    Returns:
+        Dictionary with decoded information (birth date, governorate, gender)
+    """
+    if not id_number or len(id_number) != 14 or not id_number.isdigit():
+        return {
+            'Birth Date': 'Unknown',
+            'Governorate': 'Unknown',
+            'Gender': 'Unknown'
+        }
+        
+    governorates = {
+        '01': 'Cairo',
+        '02': 'Alexandria',
+        '03': 'Port Said',
+        '04': 'Suez',
+        '11': 'Damietta',
+        '12': 'Dakahlia',
+        '13': 'Ash Sharqia',
+        '14': 'Kaliobeya',
+        '15': 'Kafr El - Sheikh',
+        '16': 'Gharbia',
+        '17': 'Monoufia',
+        '18': 'El Beheira',
+        '19': 'Ismailia',
+        '21': 'Giza',
+        '22': 'Beni Suef',
+        '23': 'Fayoum',
+        '24': 'El Menia',
+        '25': 'Assiut',
+        '26': 'Sohag',
+        '27': 'Qena',
+        '28': 'Aswan',
+        '29': 'Luxor',
+        '31': 'Red Sea',
+        '32': 'New Valley',
+        '33': 'Matrouh',
+        '34': 'North Sinai',
+        '35': 'South Sinai',
+        '88': 'Foreign'
+    }
+
+    try:
+        century_digit = int(id_number[0])
+        year = int(id_number[1:3])
+        month = int(id_number[3:5])
+        day = int(id_number[5:7])
+        governorate_code = id_number[7:9]
+        gender_code = int(id_number[12:13])
+
+        if century_digit == 2:
+            full_year = 1900 + year
+        elif century_digit == 3:
+            full_year = 2000 + year
+        else:
+            raise ValueError("Invalid century digit")
+            
+        # Validate date
+        if month < 1 or month > 12 or day < 1 or day > 31:
+            raise ValueError("Invalid date in ID")
+
+        gender = "Male" if gender_code % 2 != 0 else "Female"
+        governorate = governorates.get(governorate_code, "Unknown")
+        birth_date = f"{full_year:04d}-{month:02d}-{day:02d}"
+
+        return {
+            'Birth Date': birth_date,
+            'Governorate': governorate,
+            'Gender': gender
+        }
+    except (ValueError, IndexError) as e:
+        print(f"Error decoding ID number: {str(e)}")
+        return {
+            'Birth Date': 'Unknown',
+            'Governorate': 'Unknown',
+            'Gender': 'Unknown'
+        }
+
+# ====================================================
+# API ENDPOINTS
+# ====================================================
+
 @api_view(['POST'])
 def upload_national_card(request):
+    """
+    Upload and validate national ID card front and back images.
+    
+    Performs validation on:
+    - Required fields
+    - Image format and size
+    - ID card detection
+    - ID information extraction
+    
+    Args:
+        request: HTTP request with form data containing:
+            - id_front_image: Front image of the national ID card
+            - id_back_image: Back image of the national ID card
+            - user_id: User identifier
+            
+    Returns:
+        JsonResponse with upload result or error details
+    """
+    errors = {}
+    temp_files = []
+    id_card_model = None
+    
     try:
+        # Required field validation
         front_national_card = request.FILES.get('id_front_image')
         back_national_card = request.FILES.get('id_back_image')
         user_id = request.data.get('user_id')
-
-        if not front_national_card or not back_national_card or not user_id:
-            return JsonResponse({'error': 'user_id, front, and back images are required.'}, status=400)
-
+        
+        if not user_id:
+            errors['user_id'] = 'User ID is required'
+        if not front_national_card:
+            errors['front_image'] = 'Front image is required'
+        if not back_national_card:
+            errors['back_image'] = 'Back image is required'
+            
+        if errors:
+            return JsonResponse({'error': 'Missing required fields', 'details': errors}, status=400)
+            
+        # File type validation
+        allowed_types = ['image/jpeg', 'image/png', 'image/jpg']
+        max_size = 5 * 1024 * 1024  # 5MB limit
+        
+        if front_national_card.content_type not in allowed_types:
+            errors['front_image'] = f'Invalid format: {front_national_card.content_type}. Use JPEG/PNG only'
+        elif front_national_card.size > max_size:
+            errors['front_image'] = 'Image exceeds 5MB size limit'
+            
+        if back_national_card.content_type not in allowed_types:
+            errors['back_image'] = f'Invalid format: {back_national_card.content_type}. Use JPEG/PNG only'
+        elif back_national_card.size > max_size:
+            errors['back_image'] = 'Image exceeds 5MB size limit'
+            
+        if errors:
+            return JsonResponse({'error': 'Invalid files', 'details': errors}, status=400)
+        
+        # Save images to temporary files for processing
+        front_temp = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+        for chunk in front_national_card.chunks():
+            front_temp.write(chunk)
+        front_temp.close()
+        temp_files.append(front_temp.name)
+        
+        back_temp = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+        for chunk in back_national_card.chunks():
+            back_temp.write(chunk)
+        back_temp.close()
+        temp_files.append(back_temp.name)
+        
+        # Try to load the ID card model
+        id_card_model = load_yolo_model('detect_id_card.pt')
+        
+        if id_card_model is None:
+            return JsonResponse({
+                'error': 'Configuration error',
+                'details': {'system': 'Failed to load ID card detection model. Please contact support.'}
+            }, status=500)
+        
+        # ID card validation for front image
+        try:
+            front_results = id_card_model(front_temp.name)
+            
+            if len(front_results[0].boxes) == 0:
+                errors['front_image'] = 'No national ID card detected in the image'
+            else:
+                # Try to extract information from the ID card
+                try:
+                    digit_model = load_yolo_model('detect_id.pt')
+                    object_model = load_yolo_model('detect_odjects.pt')
+                    
+                    if digit_model is None or object_model is None:
+                        errors['front_image'] = 'System could not load required models for ID processing'
+                    else:
+                        # Updated to use your existing detection function
+                        id_info = detect_and_process_id_card(front_temp.name)
+                        id_number = id_info[3]  # National ID number
+                        
+                        # Validate ID number (14 digits for Egyptian IDs)
+                        #if not id_number or not re.match(r'^\d{14}$', id_number):
+                         #   errors['front_image'] = 'Invalid or unreadable ID number'
+                except Exception as e:
+                    errors['front_image'] = f'Cannot extract information from ID card: {str(e)[:100]}. Please provide a clearer image'
+        except Exception as e:
+            errors['front_image'] = f'Failed to validate ID card: {str(e)[:100]}'
+            
+        # Basic validation for back image
+        try:
+            back_results = id_card_model(back_temp.name)
+            if len(back_results[0].boxes) == 0:
+                errors['back_image'] = 'No national ID card detected in the back image'
+        except Exception as e:
+            errors['back_image'] = f'Failed to validate back of ID card: {str(e)[:100]}'
+            
+        if errors:
+            return JsonResponse({'error': 'ID validation failed', 'details': errors}, status=400)
+        
+        # If all validation passes, proceed with upload to Google Drive
         main_folder_id = "1nIPlwpcUGkDK0hvCfU_TlrRJyt6EmSi5"
         user_folder_id = get_or_create_drive_folder(user_id, parent_folder_id=main_folder_id)
 
@@ -390,12 +761,18 @@ def upload_national_card(request):
         back_file_name = back_national_card.name
         back_image_url = upload_image_to_drive(back_national_card, back_file_name, user_folder_id)
 
+        # Store the data in Firebase with extracted information
         ref = db.reference("users").child(user_id).child("national_card")
-        ref.set({
+        data = {
             "front_url": front_image_url,
             "back_url": back_image_url,
-        })
+            "verified": True
+        }
+        
+            
+        ref.set(data)
 
+        # Return the original response structure to maintain frontend contract
         return JsonResponse({
             'message': 'National card uploaded.',
             'front_url': front_image_url,
@@ -403,7 +780,14 @@ def upload_national_card(request):
         })
 
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'error': f'Server error: {str(e)[:200]}'}, status=500)
+    finally:
+        # Clean up temporary files
+        for temp_file in temp_files:
+            try:
+                os.unlink(temp_file)
+            except Exception:
+                pass  # Suppress cleanup errors
 
 
 @api_view(['POST'])

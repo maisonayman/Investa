@@ -88,31 +88,87 @@ def upload_video_to_drive(file_path, file_name, folder_id):
     except Exception as e:
         raise Exception(f"Google Drive upload failed: {str(e)}")
 
+import io
+import logging
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+from django.conf import settings
 
 def upload_image_to_drive(file_obj, file_name, folder_id):
-
-  
+    """
+    Upload a file to Google Drive and return a public URL to the file.
+    
+    Args:
+        file_obj: The file object to upload (must have a 'read' method and 'content_type' attribute)
+        file_name: Name for the file in Google Drive
+        folder_id: ID of the Google Drive folder to upload to
+        
+    Returns:
+        str: URL to access the uploaded file
+        
+    Raises:
+        ValueError: If parameters are invalid
+        IOError: If file reading fails
+        Exception: For other upload failures
+    """
+    if not file_obj:
+        raise ValueError("File object cannot be None")
+    if not file_name:
+        raise ValueError("File name cannot be empty")
+    if not folder_id:
+        raise ValueError("Folder ID cannot be empty")
+        
     try:
-        service = build("drive", "v3", credentials=settings.GOOGLE_CREDENTIALS)
+        # Get the actual content type from the file object if available
+        mime_type = getattr(file_obj, 'content_type', 'image/jpeg')
+        
+        # Create Google Drive API service
+        try:
+            service = build("drive", "v3", credentials=settings.GOOGLE_CREDENTIALS)
+        except AttributeError:
+            logging.error("Google Drive credentials not properly configured in settings")
+            raise ValueError("Google Drive credentials not configured")
+            
+        # Reset file pointer to beginning if it supports seeking
+        if hasattr(file_obj, 'seek') and callable(file_obj.seek):
+            file_obj.seek(0)
+            
+        # Create file stream and upload media
+        try:
+            file_stream = io.BytesIO(file_obj.read())
+        except Exception as e:
+            logging.error(f"Failed to read file content: {str(e)}")
+            raise IOError(f"Unable to read file content: {str(e)}")
+            
+        media = MediaIoBaseUpload(
+            file_stream, 
+            mimetype=mime_type, 
+            resumable=True
+        )
 
-        file_stream = io.BytesIO(file_obj.read())
-        media = MediaIoBaseUpload(file_stream, mimetype="image/jpeg", resumable=True)
-
+        # Set up file metadata including parent folder
         file_metadata = {
             "name": file_name,
             "parents": [folder_id]
         }
 
-        uploaded_file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields="id"
-        ).execute()
-
-        return f"https://drive.google.com/uc?id={uploaded_file['id']}"
+        # Execute the upload
+        try:
+            uploaded_file = service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields="id"
+            ).execute()
+            
+            # Return the public access URL
+            return f"https://drive.google.com/uc?id={uploaded_file['id']}"
+        except Exception as e:
+            logging.error(f"Drive API error during upload: {str(e)}")
+            raise Exception(f"Failed to upload to Google Drive: {str(e)}")
 
     except Exception as e:
-        raise Exception(f"Error uploading image to Google Drive: {e}")
+        logging.error(f"Error uploading to Google Drive: {str(e)}")
+        raise Exception(f"Error uploading to Google Drive: {str(e)}")
 
 
 def upload_file_to_drive(uploaded_file, file_name):
